@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Reklamace Škoda</title>
+<title>Reklamace {{ brand_label }}</title>
 <style>
   :root {
     --blue:    #1F4E79;
@@ -37,10 +37,19 @@
     transition: opacity .15s; white-space: nowrap;
   }
   .btn:hover { opacity: .85; }
-  .btn-new { background: #27ae60; color: #fff; }
+  .btn-new    { background: #27ae60; color: #fff; }
+  .btn-export { background: #e67e22; color: #fff; }
   .btn-cancel { background: rgba(255,255,255,.15); color: #fff; }
 
-  main { padding: 20px 24px; max-width: 1100px; margin: 0 auto; }
+  main { padding: 20px 24px; max-width: 1250px; margin: 0 auto; }
+
+  .year-total { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
+  .stat-box {
+    background: #fff; border: 1.5px solid var(--border); border-radius: 8px;
+    padding: 10px 18px; min-width: 140px; text-align: center;
+  }
+  .stat-box .sv { font-size: 20px; font-weight: 800; color: var(--blue); }
+  .stat-box .sl { font-size: 11px; color: #666; margin-top: 2px; }
 
   .card {
     background: #fff; border-radius: 10px; box-shadow: 0 1px 4px rgba(0,0,0,.1);
@@ -50,7 +59,7 @@
     background: var(--blue); color: #fff; padding: 10px 16px;
     font-weight: 700; font-size: 13px; display: flex; align-items: center; gap: 8px;
   }
-  .card-body { padding: 16px; }
+  .card-body { padding: 16px; overflow-x: auto; }
 
   #newForm { display: none; }
   #newForm.show { display: block; }
@@ -68,9 +77,9 @@
     background: var(--blue); color: #fff; padding: 8px 10px; text-align: left;
     font-size: 11px; white-space: nowrap;
   }
-  table.grid td { padding: 8px 10px; border-bottom: 1px solid #eee; }
+  table.grid td { padding: 8px 10px; border-bottom: 1px solid #eee; white-space: nowrap; }
   table.grid tr.row:hover td { background: #f7fafc; cursor: pointer; }
-  table.grid td.center { text-align: center; }
+  table.grid td.num { text-align: right; }
 
   .badge {
     display: inline-block; padding: 3px 10px; border-radius: 12px;
@@ -79,11 +88,6 @@
   .badge.nova     { background: #7f8c9a; }
   .badge.probiha  { background: var(--orange); }
   .badge.vyrizeno { background: var(--green); }
-
-  .dots { display: inline-flex; gap: 4px; }
-  .dot { width: 10px; height: 10px; border-radius: 50%; background: #dfe4ea; }
-  .dot.hotovo    { background: var(--green); }
-  .dot.probiha   { background: var(--orange); }
 
   .empty { padding: 30px; text-align: center; color: #888; }
 
@@ -102,8 +106,8 @@
 <header>
   <h1>🛠️ Reklamace {{ brand_label }}</h1>
   <a class="home" href="/">← Výběr značky</a>
-  <a class="home" href="/{{ brand }}/historie">📊 Historie</a>
   <div class="spacer"></div>
+  <button class="btn btn-export" onclick="exportXlsx()">📊 Exportovat do Excelu</button>
   <button class="btn btn-new" id="toggleNewBtn" onclick="toggleNewForm()">➕ Nová reklamace</button>
 </header>
 
@@ -134,6 +138,8 @@
     </div>
   </div>
 
+  <div class="year-total" id="stats"></div>
+
   <div class="card">
     <div class="card-header">📋 Přehled reklamací</div>
     <div class="card-body" id="listBody">
@@ -147,8 +153,7 @@
 
 <script>
 const BRAND = {{ brand | tojson }};
-const STAV_LABELS = { "nová": "Otevřeno", "probíhá": "Probíhá", "vyřízeno": "Uzavřeno" };
-const STAV_CLASS  = { "nová": "nova", "probíhá": "probiha", "vyřízeno": "vyrizeno" };
+const STAV_CLASS = { "nová": "nova", "probíhá": "probiha", "vyřízeno": "vyrizeno" };
 
 function fmtDate(iso) {
   if (!iso) return "—";
@@ -156,44 +161,53 @@ function fmtDate(iso) {
   return `${d}.${m}.${y}`;
 }
 
-async function loadList() {
-  const resp = await fetch(`/api/reklamace?znacka=${BRAND}`);
-  const items = await resp.json();
-  render(items);
+function escapeHtml(s) {
+  return (s || "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 }
 
-function render(items) {
+async function loadList() {
+  const resp = await fetch(`/api/reklamace/historie?znacka=${BRAND}`);
+  const rows = await resp.json();
+  renderStats(rows);
+  render(rows);
+}
+
+function renderStats(rows) {
+  const otevrene = rows.filter(r => r.stav !== "vyřízeno").length;
+  const uzavrene = rows.filter(r => r.stav === "vyřízeno").length;
+  const celkemHodin = rows.reduce((s, r) => s + (r.celkem_hodin || 0), 0);
+  document.getElementById("stats").innerHTML = `
+    <div class="stat-box"><div class="sv">${rows.length}</div><div class="sl">Celkem reklamací</div></div>
+    <div class="stat-box"><div class="sv">${otevrene}</div><div class="sl">Otevřené / probíhající</div></div>
+    <div class="stat-box"><div class="sv">${uzavrene}</div><div class="sl">Uzavřené</div></div>
+    <div class="stat-box"><div class="sv">${celkemHodin.toFixed(1)} h</div><div class="sl">Odpracováno celkem</div></div>`;
+}
+
+function render(rows) {
   const body = document.getElementById("listBody");
-  if (!items.length) {
+  if (!rows.length) {
     body.innerHTML = `<div class="empty">Zatím žádné reklamace. Založte první tlačítkem "Nová reklamace".</div>`;
     return;
   }
   let html = `<table class="grid"><thead><tr>
     <th>Číslo</th><th>Servisní partner</th><th>Kontaktní osoba</th>
-    <th>Datum přijetí</th><th>Fáze</th><th>Stav</th><th>Celkem hodin</th>
+    <th>Datum přijetí</th><th>Stav</th><th>Doba trvání (prac. dny)</th>
+    <th>Aktuální fáze</th><th>Celkem hodin</th>
   </tr></thead><tbody>`;
-  for (const it of items) {
-    const dots = ["wetsy","getac","actia","ostatni"].map(k => {
-      const s = it.faze[k].stav;
-      const cls = s === "hotovo" ? "hotovo" : (s === "probíhá" ? "probiha" : "");
-      return `<span class="dot ${cls}" title="${k}: ${s}"></span>`;
-    }).join("");
-    html += `<tr class="row" onclick="location.href='/${BRAND}/reklamace/${it.cislo}'">
-      <td><strong>${it.cislo}</strong></td>
-      <td>${escapeHtml(it.servisni_partner)}</td>
-      <td>${escapeHtml(it.kontaktni_osoba || "—")}</td>
-      <td>${fmtDate(it.datum_prijeti)}</td>
-      <td class="center"><span class="dots">${dots}</span></td>
-      <td><span class="badge ${STAV_CLASS[it.celkovy_stav]}">${STAV_LABELS[it.celkovy_stav]}</span></td>
-      <td>${(it.celkem_hodin ?? 0)} h</td>
+  for (const r of rows) {
+    html += `<tr class="row" onclick="location.href='/${BRAND}/reklamace/${r.cislo}'">
+      <td><strong>${r.cislo}</strong></td>
+      <td>${escapeHtml(r.servisni_partner)}</td>
+      <td>${escapeHtml(r.kontaktni_osoba || "—")}</td>
+      <td>${fmtDate(r.datum_prijeti)}</td>
+      <td><span class="badge ${STAV_CLASS[r.stav]}">${escapeHtml(r.stav_label)}</span></td>
+      <td class="num">${r.doba_pracovnich_dni ?? "—"}</td>
+      <td>${escapeHtml(r.aktualni_faze)}</td>
+      <td class="num">${r.celkem_hodin} h</td>
     </tr>`;
   }
   html += "</tbody></table>";
   body.innerHTML = html;
-}
-
-function escapeHtml(s) {
-  return (s || "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 }
 
 function toggleNewForm(show) {
@@ -232,6 +246,10 @@ async function createReklamace() {
     err.textContent = e.message;
     err.style.display = "block";
   }
+}
+
+function exportXlsx() {
+  window.location.href = `/api/reklamace/export?znacka=${BRAND}`;
 }
 
 function showToast(msg, isError = false) {

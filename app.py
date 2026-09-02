@@ -5,9 +5,12 @@ Lokální spuštění: python3 app.py
 Produkční spuštění (Railway/Render/PythonAnywhere): gunicorn app:app
 """
 import os
+from pathlib import Path
 
-from flask import Flask, jsonify, render_template, request, send_file, abort
+from flask import Flask, jsonify, redirect, render_template, request, send_file, abort
 import reklamace_data
+
+OUTPUT_DIR = Path("output") / "reklamace"
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024  # 20 MB na požadavek/přílohu
@@ -38,10 +41,10 @@ def reklamace_detail_page(brand, cislo):
 
 @app.route("/<brand>/historie")
 def reklamace_historie_page(brand):
+    # Historie byla sloučena do hlavního přehledu reklamací.
     if brand not in reklamace_data.BRANDS:
         abort(404)
-    return render_template("reklamace_historie.html", brand=brand,
-                            brand_label=reklamace_data.BRANDS[brand]["label"])
+    return redirect(f"/{brand}")
 
 # ── API ───────────────────────────────────────────────────────────────────────
 
@@ -127,6 +130,17 @@ def api_reklamace_priloha_download(cislo, faze_key, filename):
     if not path.exists():
         abort(404, "Příloha nenalezena.")
     return send_file(path, as_attachment=True, download_name=filename)
+
+@app.get("/api/reklamace/export")
+def api_reklamace_export():
+    brand = request.args.get("znacka")
+    if brand not in reklamace_data.BRANDS:
+        return jsonify({"status": "error", "message": "Neznámá značka."}), 400
+    from datetime import date
+    filename = f"reklamace_{brand}_{date.today().strftime('%m_%Y')}.xlsx"
+    out_path = OUTPUT_DIR / filename
+    reklamace_data.export_xlsx(brand, out_path)
+    return send_file(out_path, as_attachment=True, download_name=filename)
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
