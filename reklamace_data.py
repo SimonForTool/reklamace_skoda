@@ -6,6 +6,8 @@ Ostatní dodavatel), z nichž každá se eviduje samostatně (stav, datum,
 poznámka, odpovědná osoba, přílohy). Interní číslo má formát
 REK-<rok>-<pořadové číslo v daném roce>, rok se odvozuje z data přijetí.
 """
+from __future__ import annotations
+
 import json
 from datetime import date, datetime
 from pathlib import Path

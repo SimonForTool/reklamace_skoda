@@ -1,11 +1,16 @@
 """
 Reklamace Škoda — evidence reklamací servisních partnerů.
-Spuštění: python3 app.py
+
+Lokální spuštění: python3 app.py
+Produkční spuštění (Railway/Render/PythonAnywhere): gunicorn app:app
 """
+import os
+
 from flask import Flask, jsonify, render_template, request, send_file, abort
 import reklamace_data
 
 app = Flask(__name__)
+app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024  # 20 MB na požadavek/přílohu
 
 # ── HTML stránky ──────────────────────────────────────────────────────────────
 
@@ -84,4 +89,5 @@ def api_reklamace_priloha_download(cislo, faze_key, filename):
     return send_file(path, as_attachment=True, download_name=filename)
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5000)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
