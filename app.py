@@ -38,7 +38,8 @@ def reklamace_detail_page(brand, cislo):
     return render_template("reklamace_detail.html", cislo=cislo, brand=brand,
                             brand_label=reklamace_data.BRANDS[brand]["label"],
                             faze_defs=reklamace_data.FAZE_DEFS,
-                            krok_katalog=reklamace_data.KROK_KATALOG)
+                            krok_katalog=reklamace_data.KROK_KATALOG,
+                            dopravci=reklamace_data.DOPRAVCI)
 
 @app.route("/<brand>/historie")
 def reklamace_historie_page(brand):

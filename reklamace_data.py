@@ -107,6 +107,8 @@ EXPORT_BLOKY = [
     ("actia", "ACTIA IME", "U"),
 ]
 
+DOPRAVCI = ["Česká pošta", "DHL", "Geis", "PPL", "GLS", "Zásilkovna", "DPD", "Toptrans", "Jiný"]
+
 
 def _empty_kroky() -> list:
     return []
@@ -120,6 +122,13 @@ def _empty_faze(key: str) -> dict:
         "odpovedna_osoba": "",
         "prilohy": [],
         "kroky": _empty_kroky(),
+        # Náklady a fakturace
+        "naklady_fortool": None,
+        "dopravce": "",
+        "vydana_faktura": None,
+        "uhrada_potvrzena": False,
+        "datum_uhrady": None,
+        "poznamky_faktura": "",
     }
     if key == "ostatni":
         f["dodavatel"] = ""
@@ -132,6 +141,42 @@ def faze_total_minutes(faze: dict) -> float:
 
 def reklamace_total_minutes(item: dict) -> float:
     return sum(faze_total_minutes(item["faze"][k]) for k in FAZE_KEYS)
+
+
+def reklamace_naklady_celkem(item: dict) -> float:
+    return sum((item["faze"][k].get("naklady_fortool") or 0) for k in FAZE_KEYS)
+
+
+def reklamace_faktura_celkem(item: dict) -> float:
+    return sum((item["faze"][k].get("vydana_faktura") or 0) for k in FAZE_KEYS)
+
+
+def reklamace_faktura_neuhrazeno(item: dict) -> float:
+    return sum(
+        (item["faze"][k].get("vydana_faktura") or 0)
+        for k in FAZE_KEYS
+        if (item["faze"][k].get("vydana_faktura") or 0) > 0 and not item["faze"][k].get("uhrada_potvrzena")
+    )
+
+
+def reklamace_uhrada_stav(item: dict) -> str:
+    faktury = [item["faze"][k] for k in FAZE_KEYS if (item["faze"][k].get("vydana_faktura") or 0) > 0]
+    if not faktury:
+        return "—"
+    if all(f.get("uhrada_potvrzena") for f in faktury):
+        return "Uhrazeno"
+    if any(f.get("uhrada_potvrzena") for f in faktury):
+        return "Částečně uhrazeno"
+    return "Čeká na úhradu"
+
+
+def reklamace_poznamky_souhrn(item: dict) -> str:
+    casti = []
+    for k in FAZE_KEYS:
+        text = (item["faze"][k].get("poznamky_faktura") or "").strip()
+        if text:
+            casti.append(f"{FAZE_LABEL_BY_KEY[k]}: {text}")
+    return " | ".join(casti)
 
 
 def minutes_to_hours(minutes: float) -> float:
@@ -268,9 +313,18 @@ def update_faze(cislo: str, faze_key: str, patch: dict) -> dict | None:
     if not item:
         return None
     faze = item["faze"][faze_key]
-    for key in ("stav", "datum", "poznamka", "odpovedna_osoba", "dodavatel"):
+    for key in ("stav", "datum", "poznamka", "odpovedna_osoba", "dodavatel",
+                "dopravce", "datum_uhrady", "poznamky_faktura"):
         if key in patch:
             faze[key] = patch[key]
+    for key in ("naklady_fortool", "vydana_faktura"):
+        if key in patch:
+            try:
+                faze[key] = float(patch[key]) if patch[key] not in (None, "") else None
+            except (TypeError, ValueError):
+                faze[key] = None
+    if "uhrada_potvrzena" in patch:
+        faze["uhrada_potvrzena"] = bool(patch["uhrada_potvrzena"])
     _sync_uzavreno(item)
     save_all(data)
     item["celkovy_stav"] = overall_status(item)
@@ -388,6 +442,9 @@ def history_row(item: dict) -> dict:
         except ValueError:
             pass
     total_minutes = reklamace_total_minutes(item)
+    dopravci = ", ".join(dict.fromkeys(
+        item["faze"][k]["dopravce"] for k in FAZE_KEYS if item["faze"][k].get("dopravce")
+    ))
     return {
         "cislo": item["cislo"],
         "servisni_partner": item["servisni_partner"],
@@ -401,6 +458,12 @@ def history_row(item: dict) -> dict:
         "aktualni_faze": aktualni_faze_label(item),
         "celkem_minut": total_minutes,
         "celkem_hodin": minutes_to_hours(total_minutes),
+        "naklady_celkem": round(reklamace_naklady_celkem(item), 2),
+        "dopravci": dopravci,
+        "faktura_celkem": round(reklamace_faktura_celkem(item), 2),
+        "faktura_neuhrazeno": round(reklamace_faktura_neuhrazeno(item), 2),
+        "uhrada_stav": reklamace_uhrada_stav(item),
+        "poznamky": reklamace_poznamky_souhrn(item),
     }
 
 

@@ -177,6 +177,10 @@ function initials(name) {
   return name.trim().split(/\s+/).map(p => p[0].toUpperCase()).join("");
 }
 
+function fmtKc(n) {
+  return `${(n || 0).toLocaleString("cs-CZ")} Kč`;
+}
+
 function renderStats(rows) {
   const otevrene = rows.filter(r => r.stav !== "vyřízeno").length;
   const uzavrene = rows.filter(r => r.stav === "vyřízeno");
@@ -185,12 +189,18 @@ function renderStats(rows) {
   const prumerDnu = dobaUzavrenych.length
     ? dobaUzavrenych.reduce((s, r) => s + r.doba_pracovnich_dni, 0) / dobaUzavrenych.length
     : null;
+  const naklady = rows.reduce((s, r) => s + (r.naklady_celkem || 0), 0);
+  const faktura = rows.reduce((s, r) => s + (r.faktura_celkem || 0), 0);
+  const neuhrazeno = rows.reduce((s, r) => s + (r.faktura_neuhrazeno || 0), 0);
   document.getElementById("stats").innerHTML = `
     <div class="stat-box"><div class="sv">${rows.length}</div><div class="sl">Celkem reklamací</div></div>
     <div class="stat-box"><div class="sv">${otevrene}</div><div class="sl">Otevřené / probíhající</div></div>
     <div class="stat-box"><div class="sv">${uzavrene.length}</div><div class="sl">Uzavřené</div></div>
     <div class="stat-box"><div class="sv">${celkemHodin.toFixed(1)} h</div><div class="sl">Odpracováno celkem</div></div>
-    <div class="stat-box"><div class="sv">${prumerDnu != null ? prumerDnu.toFixed(1) : "—"}</div><div class="sl">Průměr prac. dnů / uzavřenou reklamaci</div></div>`;
+    <div class="stat-box"><div class="sv">${prumerDnu != null ? prumerDnu.toFixed(1) : "—"}</div><div class="sl">Průměr prac. dnů / uzavřenou reklamaci</div></div>
+    <div class="stat-box"><div class="sv">${fmtKc(naklady)}</div><div class="sl">Náklady ForTool celkem</div></div>
+    <div class="stat-box"><div class="sv">${fmtKc(faktura)}</div><div class="sl">Vydaná faktura celkem bez DPH</div></div>
+    <div class="stat-box"><div class="sv" style="${neuhrazeno > 0 ? 'color:#e67e22' : ''}">${fmtKc(neuhrazeno)}</div><div class="sl">Čeká na úhradu</div></div>`;
 }
 
 function render(rows) {
@@ -203,11 +213,20 @@ function render(rows) {
     <th>Číslo</th><th>Servisní partner</th><th>Kontaktní osoba</th>
     <th>Datum přijetí</th><th>Datum ukončení</th><th>Stav</th><th>Doba trvání (prac. dny)</th>
     <th>Aktuální fáze</th><th>Odpovědná osoba</th><th>Celkem hodin</th>
+    <th>Náklady ForTool</th><th>Faktura bez DPH</th><th>Úhrada</th><th>Poznámky</th>
   </tr></thead><tbody>`;
   for (const r of rows) {
     const inits = initials(r.odpovedna_osoba);
     const odpTd = inits
       ? `<span title="${escapeHtml(r.odpovedna_osoba)}" style="cursor:help;border-bottom:1px dotted #999">${inits}</span>`
+      : "—";
+    const naklady = r.naklady_celkem
+      ? `${fmtKc(r.naklady_celkem)}${r.dopravci ? ` <span style="color:#888">(${escapeHtml(r.dopravci)})</span>` : ""}`
+      : "—";
+    const uhradaClass = r.uhrada_stav === "Uhrazeno" ? "vyrizeno"
+      : (r.uhrada_stav === "Čeká na úhradu" || r.uhrada_stav === "Částečně uhrazeno") ? "probiha" : "";
+    const poznamky = r.poznamky
+      ? `<span title="${escapeHtml(r.poznamky)}" style="cursor:help;border-bottom:1px dotted #999">${escapeHtml(r.poznamky.slice(0, 30))}${r.poznamky.length > 30 ? "…" : ""}</span>`
       : "—";
     html += `<tr class="row" onclick="location.href='/${BRAND}/reklamace/${r.cislo}'">
       <td><strong>${r.cislo}</strong></td>
@@ -220,6 +239,10 @@ function render(rows) {
       <td>${escapeHtml(r.aktualni_faze)}</td>
       <td>${odpTd}</td>
       <td class="num">${r.celkem_hodin} h</td>
+      <td class="num">${naklady}</td>
+      <td class="num">${r.faktura_celkem ? fmtKc(r.faktura_celkem) : "—"}</td>
+      <td>${uhradaClass ? `<span class="badge ${uhradaClass}">${escapeHtml(r.uhrada_stav)}</span>` : "—"}</td>
+      <td>${poznamky}</td>
     </tr>`;
   }
   html += "</tbody></table>";

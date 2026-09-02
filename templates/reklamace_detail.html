@@ -176,6 +176,8 @@
         </div>
         <div class="stat-row">
           <div class="stat-box"><div class="sv" id="statCelkemHodin">0 h</div><div class="sl">Celkem odpracováno (vše)</div></div>
+          <div class="stat-box"><div class="sv" id="statNaklady">0 Kč</div><div class="sl">Náklady ForTool celkem</div></div>
+          <div class="stat-box"><div class="sv" id="statFaktura">0 Kč</div><div class="sl">Vydaná faktura celkem bez DPH</div></div>
         </div>
       </div>
     </div>
@@ -242,6 +244,51 @@
         </div>
       </div>
     </div>
+
+    <div class="card">
+      <div class="card-header">💰 Náklady a fakturace — {{ f.label }}</div>
+      <div class="card-body">
+        <div class="form-grid">
+          <div class="field">
+            <label>Náklady ForTool (odeslání zařízení) [Kč]</label>
+            <input id="f-{{ f.key }}-naklady_fortool" type="number" min="0" step="0.01"
+                   onchange="changeFazeNum('{{ f.key }}', 'naklady_fortool', this.value)">
+          </div>
+          <div class="field">
+            <label>Dopravce</label>
+            <select id="f-{{ f.key }}-dopravce" onchange="changeDopravce('{{ f.key }}', this.value)">
+              <option value="">— nevybráno —</option>
+              {% for d in dopravci %}
+              <option value="{{ d }}">{{ d }}</option>
+              {% endfor %}
+            </select>
+            <input id="f-{{ f.key }}-dopravce-jiny" type="text" placeholder="Uveďte dopravce"
+                   style="margin-top:6px;display:none"
+                   onchange="changeFaze('{{ f.key }}', 'dopravce', this.value)">
+          </div>
+          <div class="field">
+            <label>Vydaná faktura bez DPH — pozáruční servis [Kč]</label>
+            <input id="f-{{ f.key }}-vydana_faktura" type="number" min="0" step="0.01"
+                   onchange="changeFazeNum('{{ f.key }}', 'vydana_faktura', this.value)">
+          </div>
+          <div class="field">
+            <label>Datum úhrady</label>
+            <input id="f-{{ f.key }}-datum_uhrady" type="date"
+                   onchange="changeFaze('{{ f.key }}', 'datum_uhrady', this.value)">
+          </div>
+          <div class="field" style="display:flex;align-items:center;gap:8px;padding-top:22px">
+            <input id="f-{{ f.key }}-uhrada_potvrzena" type="checkbox" style="width:auto"
+                   onchange="changeFazeBool('{{ f.key }}', 'uhrada_potvrzena', this.checked)">
+            <label style="margin:0">Úhrada faktury potvrzena</label>
+          </div>
+          <div class="field" style="grid-column: 1 / -1">
+            <label>Poznámky</label>
+            <textarea id="f-{{ f.key }}-poznamky_faktura"
+                      onchange="changeFaze('{{ f.key }}', 'poznamky_faktura', this.value)"></textarea>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
   {% endfor %}
 
@@ -253,6 +300,7 @@
 const CISLO = {{ cislo | tojson }};
 const FAZE_KEYS = {{ faze_defs | map(attribute='key') | list | tojson }};
 const KROK_KATALOG = {{ krok_katalog | tojson }};
+const DOPRAVCI = {{ dopravci | tojson }};
 let DATA = null;
 
 async function init() {
@@ -277,6 +325,7 @@ function render() {
   document.getElementById("hOdpovednaOsoba").value = DATA.odpovedna_osoba || "";
   document.getElementById("statCelkemHodin").textContent = `${(DATA.celkem_hodin ?? 0)} h`;
 
+  let naklady = 0, faktura = 0;
   for (const key of FAZE_KEYS) {
     const f = DATA.faze[key];
     document.getElementById(`f-${key}-stav`).value = f.stav;
@@ -291,6 +340,66 @@ function render() {
     renderKroky(key, f.kroky || []);
     const dot = document.getElementById(`dot-${key}`);
     dot.className = "dot" + (f.stav === "hotovo" ? " hotovo" : f.stav === "probíhá" ? " probiha" : "");
+
+    document.getElementById(`f-${key}-naklady_fortool`).value = f.naklady_fortool ?? "";
+    document.getElementById(`f-${key}-vydana_faktura`).value = f.vydana_faktura ?? "";
+    document.getElementById(`f-${key}-datum_uhrady`).value = f.datum_uhrady || "";
+    document.getElementById(`f-${key}-uhrada_potvrzena`).checked = !!f.uhrada_potvrzena;
+    document.getElementById(`f-${key}-poznamky_faktura`).value = f.poznamky_faktura || "";
+    renderDopravce(key, f.dopravce || "");
+    naklady += Number(f.naklady_fortool) || 0;
+    faktura += Number(f.vydana_faktura) || 0;
+  }
+  document.getElementById("statNaklady").textContent = `${naklady.toLocaleString("cs-CZ")} Kč`;
+  document.getElementById("statFaktura").textContent = `${faktura.toLocaleString("cs-CZ")} Kč`;
+}
+
+function renderDopravce(key, value) {
+  const sel = document.getElementById(`f-${key}-dopravce`);
+  const jinyInput = document.getElementById(`f-${key}-dopravce-jiny`);
+  if (!value) {
+    sel.value = "";
+    jinyInput.style.display = "none";
+    jinyInput.value = "";
+  } else if (DOPRAVCI.includes(value) && value !== "Jiný") {
+    sel.value = value;
+    jinyInput.style.display = "none";
+    jinyInput.value = "";
+  } else {
+    sel.value = "Jiný";
+    jinyInput.style.display = "block";
+    jinyInput.value = value;
+  }
+}
+
+function changeDopravce(key, value) {
+  const jinyInput = document.getElementById(`f-${key}-dopravce-jiny`);
+  if (value === "Jiný") {
+    jinyInput.style.display = "block";
+    jinyInput.focus();
+  } else {
+    jinyInput.style.display = "none";
+    changeFaze(key, "dopravce", value);
+  }
+}
+
+function changeFazeNum(key, field, value) {
+  changeFaze(key, field, value);
+}
+
+async function changeFazeBool(key, field, checked) {
+  setSaving();
+  try {
+    const resp = await fetch(`/api/reklamace/${CISLO}/${key}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ [field]: checked }),
+    });
+    DATA = await resp.json();
+    render();
+    setSaved();
+  } catch (e) {
+    setError();
   }
 }
 
