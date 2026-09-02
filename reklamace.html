@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reklamace Škoda</title>
+<style>
+  :root {
+    --blue:    #1F4E79;
+    --blue2:   #2E75B6;
+    --blue3:   #BDD7EE;
+    --gray:    #f4f5f7;
+    --border:  #c8cdd4;
+    --text:    #1a1a2e;
+    --green:   #27ae60;
+    --orange:  #e67e22;
+    --red:     #e74c3c;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, "Segoe UI", Arial, sans-serif;
+         font-size: 13px; color: var(--text); background: #eef2f7; }
+
+  header {
+    background: var(--blue); color: #fff; padding: 0 24px;
+    display: flex; align-items: center; gap: 14px; height: 54px;
+    position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,.25);
+  }
+  header h1 { font-size: 16px; font-weight: 700; margin: 0; white-space: nowrap; }
+  header a.back { color: rgba(255,255,255,.7); text-decoration: none; font-size: 12px; cursor: pointer; }
+  header a.back:hover { color: #fff; }
+  header .spacer { flex: 1; }
+  .save-status { font-size: 11px; color: rgba(255,255,255,.7); min-width: 110px; text-align: right; }
+
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 7px 16px; border-radius: 6px; border: none;
+    cursor: pointer; font-size: 12.5px; font-weight: 600;
+    transition: opacity .15s; white-space: nowrap;
+  }
+  .btn:hover { opacity: .85; }
+  .btn-new { background: #27ae60; color: #fff; }
+
+  .tabs {
+    display: flex; gap: 2px; padding: 10px 24px 0;
+    background: var(--blue); overflow-x: auto;
+  }
+  .tab {
+    padding: 7px 14px; border-radius: 8px 8px 0 0; cursor: pointer;
+    font-size: 12px; font-weight: 600; color: rgba(255,255,255,.65);
+    background: rgba(255,255,255,.1); border: none; white-space: nowrap;
+    transition: background .15s; display: inline-flex; align-items: center; gap: 6px;
+  }
+  .tab:hover { background: rgba(255,255,255,.2); color: #fff; }
+  .tab.active { background: #eef2f7; color: var(--blue); }
+  .tab .dot { width: 8px; height: 8px; border-radius: 50%; background: #cfd6dd; }
+  .tab .dot.hotovo { background: var(--green); }
+  .tab .dot.probiha { background: var(--orange); }
+
+  main { padding: 20px 24px; max-width: 1100px; margin: 0 auto; }
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  .card {
+    background: #fff; border-radius: 10px; box-shadow: 0 1px 4px rgba(0,0,0,.1);
+    overflow: hidden; margin-bottom: 20px;
+  }
+  .card-header {
+    background: var(--blue); color: #fff; padding: 10px 16px;
+    font-weight: 700; font-size: 13px; display: flex; align-items: center; gap: 8px;
+  }
+  .card-body { padding: 16px; }
+
+  #newForm { display: none; }
+  #newForm.show { display: block; }
+  .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
+  .field label { display: block; font-size: 11.5px; color: #555; margin-bottom: 4px; font-weight: 600; }
+  .field input, .field select, .field textarea {
+    width: 100%; padding: 7px 9px; border: 1px solid var(--border);
+    border-radius: 6px; font-size: 13px; font-family: inherit;
+  }
+  .field textarea { resize: vertical; min-height: 70px; }
+  .form-actions { margin-top: 16px; display: flex; gap: 10px; }
+  .form-error { color: var(--red); font-size: 12px; margin-top: 8px; display: none; }
+
+  table.grid { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  table.grid th {
+    background: var(--blue); color: #fff; padding: 8px 10px; text-align: left;
+    font-size: 11px; white-space: nowrap;
+  }
+  table.grid td { padding: 8px 10px; border-bottom: 1px solid #eee; }
+  table.grid tr.row:hover td { background: #f7fafc; cursor: pointer; }
+  table.grid td.center { text-align: center; }
+
+  .badge {
+    display: inline-block; padding: 3px 10px; border-radius: 12px;
+    font-size: 11px; font-weight: 700; color: #fff;
+  }
+  .badge.nova     { background: #7f8c9a; }
+  .badge.probiha  { background: var(--orange); }
+  .badge.vyrizeno { background: var(--green); }
+
+  .dots { display: inline-flex; gap: 4px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: #dfe4ea; }
+  .dot.hotovo    { background: var(--green); }
+  .dot.probiha   { background: var(--orange); }
+
+  .empty { padding: 30px; text-align: center; color: #888; }
+
+  .stav-select.nezahájeno { color: #7f8c9a; font-weight: 700; }
+  .stav-select.probíhá    { color: var(--orange); font-weight: 700; }
+  .stav-select.hotovo     { color: var(--green); font-weight: 700; }
+
+  .priloha-list { list-style: none; margin: 10px 0 0; padding: 0; }
+  .priloha-list li {
+    display: flex; align-items: center; gap: 8px; padding: 6px 10px;
+    background: var(--gray); border-radius: 6px; margin-bottom: 6px; font-size: 12.5px;
+  }
+  .priloha-list a { color: var(--blue2); text-decoration: none; flex: 1; cursor: pointer; }
+  .priloha-list a:hover { text-decoration: underline; }
+  .priloha-list button {
+    border: none; background: none; color: var(--red); cursor: pointer; font-size: 13px;
+  }
+  .upload-row { margin-top: 12px; display: flex; align-items: center; gap: 10px; }
+
+  .note {
+    background: #fff8dc; border: 1px solid #e0c068; border-radius: 8px;
+    padding: 8px 14px; margin-bottom: 16px; font-size: 12px; color: #7a5a00;
+  }
+
+  .toast {
+    position: fixed; bottom: 20px; right: 20px; background: #27ae60; color: #fff;
+    padding: 10px 18px; border-radius: 8px; font-size: 13px; font-weight: 600;
+    box-shadow: 0 4px 12px rgba(0,0,0,.2); opacity: 0; transition: opacity .3s;
+    pointer-events: none; z-index: 999;
+  }
+  .toast.show { opacity: 1; }
+  .toast.error { background: #e74c3c; }
+</style>
+</head>
+<body>
+
+<header id="appHeader"></header>
+<div class="tabs" id="tabBar" style="display:none"></div>
+
+<main>
+  <div class="note">
+    ℹ️ Appka běží celá v tomto prohlížeči — data (i přílohy) se ukládají lokálně na tomto zařízení
+    (localStorage / IndexedDB), stejně jako u Výkazu práce. Nejsou sdílená mezi počítači ani zařízeními.
+  </div>
+  <div id="panelList" class="panel active">
+    <div class="card" id="newForm">
+      <div class="card-header">➕ Nová reklamace</div>
+      <div class="card-body">
+        <div class="form-grid">
+          <div class="field">
+            <label>Servisní partner *</label>
+            <input id="fServisniPartner" type="text" placeholder="Název servisního partnera">
+          </div>
+          <div class="field">
+            <label>Kontaktní osoba</label>
+            <input id="fKontaktniOsoba" type="text" placeholder="Jméno kontaktní osoby">
+          </div>
+          <div class="field">
+            <label>Datum přijetí reklamace *</label>
+            <input id="fDatumPrijeti" type="date">
+          </div>
+        </div>
+        <div class="form-error" id="formError"></div>
+        <div class="form-actions">
+          <button class="btn btn-new" onclick="createReklamace()">✔️ Založit reklamaci</button>
+          <button class="btn" style="background:#ccc;color:#333" onclick="toggleNewForm(false)">Zrušit</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">📋 Přehled reklamací</div>
+      <div class="card-body" id="listBody"><div class="empty">Načítám…</div></div>
+    </div>
+  </div>
+
+  <div id="panelDetail" class="panel"></div>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════
+// Datová vrstva — localStorage (základní data) + IndexedDB (přílohy)
+// ═══════════════════════════════════════════════════════════════════════════
+const STORAGE_KEY = "reklamace_skoda_v1";
+const FAZE_DEFS = [
+  { key: "wetsy",   label: "WETSy" },
+  { key: "getac",   label: "GETAC" },
+  { key: "actia",   label: "ACTIA IMEA" },
+  { key: "ostatni", label: "Ostatní dodavatel" },
+];
+const FAZE_KEYS = FAZE_DEFS.map(f => f.key);
+
+function emptyFaze(key) {
+  const f = { stav: "nezahájeno", datum: null, poznamka: "", odpovedna_osoba: "", prilohy: [] };
+  if (key === "ostatni") f.dodavatel = "";
+  return f;
+}
+
+function loadStore() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (e) {}
+  return { counters: {}, items: {} };
+}
+function saveStore() { localStorage.setItem(STORAGE_KEY, JSON.stringify(STORE)); }
+let STORE = loadStore();
+
+function overallStatus(item) {
+  const stavy = FAZE_KEYS.map(k => item.faze[k].stav);
+  if (stavy.every(s => s === "hotovo")) return "vyřízeno";
+  if (stavy.some(s => s !== "nezahájeno")) return "probíhá";
+  return "nová";
+}
+
+function listAll() {
+  return Object.values(STORE.items).sort((a, b) => b.vytvoreno.localeCompare(a.vytvoreno));
+}
+function getReklamace(cislo) { return STORE.items[cislo] || null; }
+
+function newReklamace(servisniPartner, kontaktniOsoba, datumPrijeti) {
+  let year = parseInt((datumPrijeti || "").split("-")[0], 10);
+  if (!year || isNaN(year)) {
+    year = new Date().getFullYear();
+    datumPrijeti = new Date().toISOString().slice(0, 10);
+  }
+  STORE.counters[year] = (STORE.counters[year] || 0) + 1;
+  const cislo = `REK-${year}-${String(STORE.counters[year]).padStart(3, "0")}`;
+  const item = {
+    cislo,
+    servisni_partner: servisniPartner.trim(),
+    kontaktni_osoba: kontaktniOsoba.trim(),
+    datum_prijeti: datumPrijeti,
+    vytvoreno: new Date().toISOString(),
+    faze: Object.fromEntries(FAZE_KEYS.map(k => [k, emptyFaze(k)])),
+  };
+  STORE.items[cislo] = item;
+  saveStore();
+  return item;
+}
+
+function updateHeader(cislo, patch) {
+  const item = STORE.items[cislo];
+  if (!item) return null;
+  Object.assign(item, patch);
+  saveStore();
+  return item;
+}
+
+function updateFaze(cislo, key, patch) {
+  const item = STORE.items[cislo];
+  if (!item) return null;
+  Object.assign(item.faze[key], patch);
+  saveStore();
+  return item;
+}
+
+// ── IndexedDB pro přílohy (soubory mohou být větší, než se hodí do localStorage) ──
+const DB_NAME = "reklamace_skoda_files";
+const STORE_NAME = "files";
+function openDb() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = () => req.result.createObjectStore(STORE_NAME);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+function fileKey(cislo, faze, filename) { return `${cislo}::${faze}::${filename}`; }
+async function putFile(key, blob) {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, "readwrite");
+    tx.objectStore(STORE_NAME).put(blob, key);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+async function getFile(key) {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, "readonly");
+    const r = tx.objectStore(STORE_NAME).get(key);
+    r.onsuccess = () => resolve(r.result);
+    r.onerror = () => reject(r.error);
+  });
+}
+async function deleteFileBlob(key) {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, "readwrite");
+    tx.objectStore(STORE_NAME).delete(key);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Routování (hash) — #/ = přehled, #/<číslo> = detail
+// ═══════════════════════════════════════════════════════════════════════════
+function currentRoute() {
+  const h = location.hash.replace(/^#\/?/, "");
+  return h ? decodeURIComponent(h) : null;
+}
+window.addEventListener("hashchange", render);
+
+function render() {
+  const cislo = currentRoute();
+  if (cislo && getReklamace(cislo)) {
+    renderDetail(cislo);
+  } else {
+    if (cislo) location.hash = "";
+    renderList();
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Přehled reklamací
+// ═══════════════════════════════════════════════════════════════════════════
+const STAV_LABELS = { "nová": "Nová", "probíhá": "Probíhá", "vyřízeno": "Vyřízeno" };
+const STAV_CLASS  = { "nová": "nova", "probíhá": "probiha", "vyřízeno": "vyrizeno" };
+
+function fmtDate(iso) {
+  if (!iso) return "—";
+  const [y, m, d] = iso.split("-");
+  return `${d}.${m}.${y}`;
+}
+function escapeHtml(s) {
+  return (s || "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+
+function renderList() {
+  document.getElementById("appHeader").innerHTML = `
+    <h1>🛠️ Reklamace Škoda</h1>
+    <div class="spacer"></div>
+    <button class="btn btn-new" id="toggleNewBtn" onclick="toggleNewForm()">➕ Nová reklamace</button>`;
+  document.getElementById("tabBar").style.display = "none";
+  document.getElementById("tabBar").innerHTML = "";
+  document.getElementById("panelList").classList.add("active");
+  document.getElementById("panelDetail").classList.remove("active");
+  document.getElementById("newForm").classList.remove("show");
+
+  const items = listAll();
+  const body = document.getElementById("listBody");
+  if (!items.length) {
+    body.innerHTML = `<div class="empty">Zatím žádné reklamace. Založte první tlačítkem "Nová reklamace".</div>`;
+    return;
+  }
+  let html = `<table class="grid"><thead><tr>
+    <th>Číslo</th><th>Servisní partner</th><th>Kontaktní osoba</th>
+    <th>Datum přijetí</th><th>Fáze</th><th>Stav</th>
+  </tr></thead><tbody>`;
+  for (const it of items) {
+    const dots = FAZE_KEYS.map(k => {
+      const s = it.faze[k].stav;
+      const cls = s === "hotovo" ? "hotovo" : (s === "probíhá" ? "probiha" : "");
+      return `<span class="dot ${cls}" title="${k}: ${s}"></span>`;
+    }).join("");
+    const stav = overallStatus(it);
+    html += `<tr class="row" onclick="location.hash = '/' + encodeURIComponent('${it.cislo}')">
+      <td><strong>${it.cislo}</strong></td>
+      <td>${escapeHtml(it.servisni_partner)}</td>
+      <td>${escapeHtml(it.kontaktni_osoba || "—")}</td>
+      <td>${fmtDate(it.datum_prijeti)}</td>
+      <td class="center"><span class="dots">${dots}</span></td>
+      <td><span class="badge ${STAV_CLASS[stav]}">${STAV_LABELS[stav]}</span></td>
+    </tr>`;
+  }
+  html += "</tbody></table>";
+  body.innerHTML = html;
+}
+
+function toggleNewForm(show) {
+  const form = document.getElementById("newForm");
+  const willShow = show === undefined ? !form.classList.contains("show") : show;
+  form.classList.toggle("show", willShow);
+  if (willShow) {
+    document.getElementById("fDatumPrijeti").valueAsDate = new Date();
+    document.getElementById("fServisniPartner").focus();
+  }
+}
+
+function createReklamace() {
+  const servisniPartner = document.getElementById("fServisniPartner").value.trim();
+  const kontaktniOsoba = document.getElementById("fKontaktniOsoba").value.trim();
+  const datumPrijeti = document.getElementById("fDatumPrijeti").value;
+  const err = document.getElementById("formError");
+  err.style.display = "none";
+
+  if (!servisniPartner || !datumPrijeti) {
+    err.textContent = "Vyplňte servisního partnera a datum přijetí.";
+    err.style.display = "block";
+    return;
+  }
+  const item = newReklamace(servisniPartner, kontaktniOsoba, datumPrijeti);
+  location.hash = "/" + encodeURIComponent(item.cislo);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Detail reklamace
+// ═══════════════════════════════════════════════════════════════════════════
+let CURRENT_CISLO = null;
+let ACTIVE_PANEL = "hlavicka";
+
+function renderDetail(cislo) {
+  CURRENT_CISLO = cislo;
+  const item = getReklamace(cislo);
+
+  document.getElementById("appHeader").innerHTML = `
+    <h1>🛠️ Reklamace ${escapeHtml(cislo)}</h1>
+    <a class="back" onclick="location.hash=''">← Přehled reklamací</a>
+    <div class="spacer"></div>
+    <span class="save-status" id="saveStatus"></span>`;
+
+  const tabBar = document.getElementById("tabBar");
+  tabBar.style.display = "flex";
+  tabBar.innerHTML = `
+    <button class="tab ${ACTIVE_PANEL==='hlavicka'?'active':''}" data-panel="hlavicka" onclick="switchTab('hlavicka')">📄 Základní údaje</button>
+    ${FAZE_DEFS.map(f => `
+      <button class="tab ${ACTIVE_PANEL===f.key?'active':''}" data-panel="${f.key}" onclick="switchTab('${f.key}')">
+        <span class="dot" id="dot-${f.key}"></span> ${f.label}
+      </button>`).join("")}`;
+
+  document.getElementById("panelList").classList.remove("active");
+  document.getElementById("panelDetail").classList.add("active");
+
+  const detail = document.getElementById("panelDetail");
+  detail.innerHTML = `
+    <div class="panel ${ACTIVE_PANEL==='hlavicka'?'active':''}" id="panel-hlavicka">
+      <div class="card">
+        <div class="card-header">📄 Základní údaje reklamace</div>
+        <div class="card-body">
+          <div class="form-grid">
+            <div class="field"><label>Interní číslo</label><input type="text" value="${escapeHtml(cislo)}" disabled></div>
+            <div class="field"><label>Servisní partner</label>
+              <input id="hServisniPartner" type="text" onchange="changeHeader('servisni_partner', this.value)"></div>
+            <div class="field"><label>Kontaktní osoba</label>
+              <input id="hKontaktniOsoba" type="text" onchange="changeHeader('kontaktni_osoba', this.value)"></div>
+            <div class="field"><label>Datum přijetí reklamace</label>
+              <input id="hDatumPrijeti" type="date" onchange="changeHeader('datum_prijeti', this.value)"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    ${FAZE_DEFS.map(f => `
+      <div class="panel ${ACTIVE_PANEL===f.key?'active':''}" id="panel-${f.key}">
+        <div class="card">
+          <div class="card-header">🔧 ${f.label}</div>
+          <div class="card-body">
+            <div class="form-grid">
+              ${f.key === "ostatni" ? `
+              <div class="field" style="grid-column:1/-1">
+                <label>Název dodavatele</label>
+                <input id="f-${f.key}-dodavatel" type="text" placeholder="např. Midtronics, Deutronic…"
+                       onchange="changeFaze('${f.key}', 'dodavatel', this.value)">
+              </div>` : ""}
+              <div class="field"><label>Stav</label>
+                <select id="f-${f.key}-stav" class="stav-select" onchange="changeFaze('${f.key}', 'stav', this.value)">
+                  <option value="nezahájeno">Nezahájeno</option>
+                  <option value="probíhá">Probíhá</option>
+                  <option value="hotovo">Hotovo</option>
+                </select>
+              </div>
+              <div class="field"><label>Datum</label>
+                <input id="f-${f.key}-datum" type="date" onchange="changeFaze('${f.key}', 'datum', this.value)"></div>
+              <div class="field"><label>Odpovědná osoba</label>
+                <input id="f-${f.key}-odpovedna_osoba" type="text" onchange="changeFaze('${f.key}', 'odpovedna_osoba', this.value)"></div>
+              <div class="field" style="grid-column:1/-1"><label>Poznámka</label>
+                <textarea id="f-${f.key}-poznamka" onchange="changeFaze('${f.key}', 'poznamka', this.value)"></textarea></div>
+            </div>
+            <div class="field" style="margin-top:14px">
+              <label>Přílohy</label>
+              <ul class="priloha-list" id="prilohy-${f.key}"></ul>
+              <div class="upload-row">
+                <input type="file" id="upload-${f.key}">
+                <button class="tab" style="border-radius:6px;color:#fff;background:var(--blue2)"
+                        onclick="uploadPriloha('${f.key}')">⬆️ Nahrát přílohu</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>`).join("")}
+  `;
+
+  fillDetailValues(item);
+}
+
+function fillDetailValues(item) {
+  document.getElementById("hServisniPartner").value = item.servisni_partner || "";
+  document.getElementById("hKontaktniOsoba").value = item.kontaktni_osoba || "";
+  document.getElementById("hDatumPrijeti").value = item.datum_prijeti || "";
+
+  for (const key of FAZE_KEYS) {
+    const f = item.faze[key];
+    document.getElementById(`f-${key}-stav`).value = f.stav;
+    document.getElementById(`f-${key}-stav`).className = "stav-select " + f.stav;
+    document.getElementById(`f-${key}-datum`).value = f.datum || "";
+    document.getElementById(`f-${key}-odpovedna_osoba`).value = f.odpovedna_osoba || "";
+    document.getElementById(`f-${key}-poznamka`).value = f.poznamka || "";
+    if (key === "ostatni") document.getElementById(`f-${key}-dodavatel`).value = f.dodavatel || "";
+    renderPrilohy(key, f.prilohy);
+    const dot = document.getElementById(`dot-${key}`);
+    dot.className = "dot" + (f.stav === "hotovo" ? " hotovo" : f.stav === "probíhá" ? " probiha" : "");
+  }
+}
+
+function renderPrilohy(key, prilohy) {
+  const ul = document.getElementById(`prilohy-${key}`);
+  if (!prilohy.length) {
+    ul.innerHTML = `<li style="color:#999">Zatím žádné přílohy.</li>`;
+    return;
+  }
+  ul.innerHTML = prilohy.map(name => `
+    <li>
+      <a onclick="downloadPriloha('${key}', '${escapeJs(name)}')">📎 ${escapeHtml(name)}</a>
+      <button onclick="deletePriloha('${key}', '${escapeJs(name)}')" title="Smazat">✕</button>
+    </li>`).join("");
+}
+function escapeJs(s) { return (s || "").replace(/'/g, "\\'"); }
+
+function changeHeader(field, value) {
+  setSaving();
+  updateHeader(CURRENT_CISLO, { [field]: value });
+  setSaved();
+}
+
+function changeFaze(key, field, value) {
+  setSaving();
+  const item = updateFaze(CURRENT_CISLO, key, { [field]: value });
+  fillDetailValues(item);
+  setSaved();
+}
+
+async function uploadPriloha(key) {
+  const input = document.getElementById(`upload-${key}`);
+  const file = input.files[0];
+  if (!file) { showToast("Vyberte soubor.", true); return; }
+  setSaving();
+  try {
+    await putFile(fileKey(CURRENT_CISLO, key, file.name), file);
+    const item = STORE.items[CURRENT_CISLO];
+    if (!item.faze[key].prilohy.includes(file.name)) item.faze[key].prilohy.push(file.name);
+    saveStore();
+    input.value = "";
+    fillDetailValues(item);
+    setSaved();
+  } catch (e) {
+    setError();
+    showToast("Chyba nahrávání souboru.", true);
+  }
+}
+
+async function downloadPriloha(key, filename) {
+  const blob = await getFile(fileKey(CURRENT_CISLO, key, filename));
+  if (!blob) { showToast("Soubor nenalezen v tomto prohlížeči.", true); return; }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+
+async function deletePriloha(key, filename) {
+  if (!confirm(`Smazat přílohu "${filename}"?`)) return;
+  setSaving();
+  await deleteFileBlob(fileKey(CURRENT_CISLO, key, filename));
+  const item = STORE.items[CURRENT_CISLO];
+  item.faze[key].prilohy = item.faze[key].prilohy.filter(n => n !== filename);
+  saveStore();
+  fillDetailValues(item);
+  setSaved();
+}
+
+function setSaving() { document.getElementById("saveStatus").textContent = "Ukládám…"; }
+function setSaved() {
+  const st = document.getElementById("saveStatus");
+  st.textContent = "✓ Uloženo";
+  setTimeout(() => { st.textContent = ""; }, 2000);
+}
+function setError() { document.getElementById("saveStatus").textContent = "❌ Chyba"; }
+
+function switchTab(panel) {
+  ACTIVE_PANEL = panel;
+  document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.panel === panel));
+  document.querySelectorAll("#panelDetail .panel").forEach(p => p.classList.toggle("active", p.id === `panel-${panel}`));
+}
+
+function showToast(msg, isError = false) {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.className = "toast show" + (isError ? " error" : "");
+  setTimeout(() => { t.className = "toast"; }, 3000);
+}
+
+render();
+</script>
+</body>
+</html>
