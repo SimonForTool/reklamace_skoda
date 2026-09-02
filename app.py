@@ -36,6 +36,13 @@ def reklamace_detail_page(brand, cislo):
                             brand_label=reklamace_data.BRANDS[brand]["label"],
                             faze_defs=reklamace_data.FAZE_DEFS)
 
+@app.route("/<brand>/historie")
+def reklamace_historie_page(brand):
+    if brand not in reklamace_data.BRANDS:
+        abort(404)
+    return render_template("reklamace_historie.html", brand=brand,
+                            brand_label=reklamace_data.BRANDS[brand]["label"])
+
 # ── API ───────────────────────────────────────────────────────────────────────
 
 @app.get("/api/reklamace")
@@ -44,6 +51,13 @@ def api_reklamace_list():
     if brand and brand not in reklamace_data.BRANDS:
         return jsonify({"status": "error", "message": "Neznámá značka."}), 400
     return jsonify(reklamace_data.list_all(brand))
+
+@app.get("/api/reklamace/historie")
+def api_reklamace_historie():
+    brand = request.args.get("znacka")
+    if brand and brand not in reklamace_data.BRANDS:
+        return jsonify({"status": "error", "message": "Neznámá značka."}), 400
+    return jsonify(reklamace_data.history_all(brand))
 
 @app.post("/api/reklamace")
 def api_reklamace_create():
@@ -80,6 +94,14 @@ def api_reklamace_faze_update(cislo, faze_key):
     item = reklamace_data.update_faze(cislo, faze_key, body)
     if not item:
         abort(404, "Reklamace nebo fáze nenalezena.")
+    return jsonify(item)
+
+@app.post("/api/reklamace/<cislo>/<faze_key>/krok/<int:idx>")
+def api_reklamace_krok_update(cislo, faze_key, idx):
+    body = request.get_json(force=True)
+    item = reklamace_data.update_krok(cislo, faze_key, idx, body)
+    if not item:
+        abort(404, "Reklamace, fáze nebo krok nenalezen.")
     return jsonify(item)
 
 @app.post("/api/reklamace/<cislo>/<faze_key>/priloha")

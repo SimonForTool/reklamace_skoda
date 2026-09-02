@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Historie reklamací {{ brand_label }}</title>
+<style>
+  :root {
+    --blue:    #1F4E79;
+    --blue2:   #2E75B6;
+    --blue3:   #BDD7EE;
+    --gray:    #f4f5f7;
+    --border:  #c8cdd4;
+    --text:    #1a1a2e;
+    --green:   #27ae60;
+    --orange:  #e67e22;
+    --red:     #e74c3c;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, "Segoe UI", Arial, sans-serif;
+         font-size: 13px; color: var(--text); background: #eef2f7; }
+
+  header {
+    background: var(--blue); color: #fff; padding: 0 24px;
+    display: flex; align-items: center; gap: 14px; height: 54px;
+    position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,.25);
+  }
+  header h1 { font-size: 16px; font-weight: 700; margin: 0; white-space: nowrap; }
+  header a.home { color: rgba(255,255,255,.7); text-decoration: none; font-size: 12px; }
+  header a.home:hover { color: #fff; }
+  header .spacer { flex: 1; }
+
+  main { padding: 20px 24px; max-width: 1200px; margin: 0 auto; }
+
+  .year-total { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
+  .stat-box {
+    background: #fff; border: 1.5px solid var(--border); border-radius: 8px;
+    padding: 10px 18px; min-width: 140px; text-align: center;
+  }
+  .stat-box .sv { font-size: 20px; font-weight: 800; color: var(--blue); }
+  .stat-box .sl { font-size: 11px; color: #666; margin-top: 2px; }
+
+  .card {
+    background: #fff; border-radius: 10px; box-shadow: 0 1px 4px rgba(0,0,0,.1);
+    overflow: hidden; margin-bottom: 20px;
+  }
+  .card-header {
+    background: var(--blue); color: #fff; padding: 10px 16px;
+    font-weight: 700; font-size: 13px; display: flex; align-items: center; gap: 8px;
+  }
+  .card-body { padding: 16px; overflow-x: auto; }
+
+  table.grid { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  table.grid th {
+    background: var(--blue); color: #fff; padding: 8px 10px; text-align: left;
+    font-size: 11px; white-space: nowrap;
+  }
+  table.grid td { padding: 8px 10px; border-bottom: 1px solid #eee; white-space: nowrap; }
+  table.grid tr.row:hover td { background: #f7fafc; cursor: pointer; }
+  table.grid td.num { text-align: right; }
+
+  .badge {
+    display: inline-block; padding: 3px 10px; border-radius: 12px;
+    font-size: 11px; font-weight: 700; color: #fff;
+  }
+  .badge.nova     { background: #7f8c9a; }
+  .badge.probiha  { background: var(--orange); }
+  .badge.vyrizeno { background: var(--green); }
+
+  .empty { padding: 30px; text-align: center; color: #888; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>📊 Historie reklamací — {{ brand_label }}</h1>
+  <a class="home" href="/{{ brand }}">← Přehled reklamací</a>
+  <a class="home" href="/">Výběr značky</a>
+  <div class="spacer"></div>
+</header>
+
+<main>
+  <div class="year-total" id="stats"></div>
+
+  <div class="card">
+    <div class="card-header">📋 Všechny tikety — konsolidovaný přehled</div>
+    <div class="card-body" id="listBody">
+      <div class="empty">Načítám…</div>
+    </div>
+  </div>
+</main>
+
+<script>
+const BRAND = {{ brand | tojson }};
+const STAV_CLASS = { "nová": "nova", "probíhá": "probiha", "vyřízeno": "vyrizeno" };
+
+function escapeHtml(s) {
+  return (s || "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+
+async function load() {
+  const resp = await fetch(`/api/reklamace/historie?znacka=${BRAND}`);
+  const rows = await resp.json();
+  renderStats(rows);
+  render(rows);
+}
+
+function renderStats(rows) {
+  const otevrene = rows.filter(r => r.stav !== "vyřízeno").length;
+  const uzavrene = rows.filter(r => r.stav === "vyřízeno").length;
+  const celkemHodin = rows.reduce((s, r) => s + (r.celkem_hodin || 0), 0);
+  document.getElementById("stats").innerHTML = `
+    <div class="stat-box"><div class="sv">${rows.length}</div><div class="sl">Celkem tiketů</div></div>
+    <div class="stat-box"><div class="sv">${otevrene}</div><div class="sl">Otevřené / probíhající</div></div>
+    <div class="stat-box"><div class="sv">${uzavrene}</div><div class="sl">Uzavřené</div></div>
+    <div class="stat-box"><div class="sv">${celkemHodin.toFixed(1)} h</div><div class="sl">Odpracováno celkem</div></div>`;
+}
+
+function render(rows) {
+  const body = document.getElementById("listBody");
+  if (!rows.length) {
+    body.innerHTML = `<div class="empty">Zatím žádné reklamace.</div>`;
+    return;
+  }
+  let html = `<table class="grid"><thead><tr>
+    <th>Číslo</th><th>Servisní partner</th><th>Stav</th>
+    <th>Doba trvání (prac. dny)</th><th>Aktuální fáze</th><th>Celkem hodin</th>
+  </tr></thead><tbody>`;
+  for (const r of rows) {
+    html += `<tr class="row" onclick="location.href='/${BRAND}/reklamace/${r.cislo}'">
+      <td><strong>${r.cislo}</strong></td>
+      <td>${escapeHtml(r.servisni_partner)}</td>
+      <td><span class="badge ${STAV_CLASS[r.stav]}">${escapeHtml(r.stav_label)}</span></td>
+      <td class="num">${r.doba_pracovnich_dni ?? "—"}</td>
+      <td>${escapeHtml(r.aktualni_faze)}</td>
+      <td class="num">${r.celkem_hodin} h</td>
+    </tr>`;
+  }
+  html += "</tbody></table>";
+  body.innerHTML = html;
+}
+
+load();
+</script>
+</body>
+</html>

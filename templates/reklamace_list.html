@@ -102,6 +102,7 @@
 <header>
   <h1>🛠️ Reklamace {{ brand_label }}</h1>
   <a class="home" href="/">← Výběr značky</a>
+  <a class="home" href="/{{ brand }}/historie">📊 Historie</a>
   <div class="spacer"></div>
   <button class="btn btn-new" id="toggleNewBtn" onclick="toggleNewForm()">➕ Nová reklamace</button>
 </header>
@@ -146,7 +147,7 @@
 
 <script>
 const BRAND = {{ brand | tojson }};
-const STAV_LABELS = { "nová": "Nová", "probíhá": "Probíhá", "vyřízeno": "Vyřízeno" };
+const STAV_LABELS = { "nová": "Otevřeno", "probíhá": "Probíhá", "vyřízeno": "Uzavřeno" };
 const STAV_CLASS  = { "nová": "nova", "probíhá": "probiha", "vyřízeno": "vyrizeno" };
 
 function fmtDate(iso) {
@@ -169,7 +170,7 @@ function render(items) {
   }
   let html = `<table class="grid"><thead><tr>
     <th>Číslo</th><th>Servisní partner</th><th>Kontaktní osoba</th>
-    <th>Datum přijetí</th><th>Fáze</th><th>Stav</th>
+    <th>Datum přijetí</th><th>Fáze</th><th>Stav</th><th>Celkem hodin</th>
   </tr></thead><tbody>`;
   for (const it of items) {
     const dots = ["wetsy","getac","actia","ostatni"].map(k => {
@@ -184,6 +185,7 @@ function render(items) {
       <td>${fmtDate(it.datum_prijeti)}</td>
       <td class="center"><span class="dots">${dots}</span></td>
       <td><span class="badge ${STAV_CLASS[it.celkovy_stav]}">${STAV_LABELS[it.celkovy_stav]}</span></td>
+      <td>${(it.celkem_hodin ?? 0)} h</td>
     </tr>`;
   }
   html += "</tbody></table>";

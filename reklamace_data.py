@@ -11,7 +11,7 @@ z data přijetí. Číselná řada se počítá zvlášť pro každou značku.
 from __future__ import annotations
 
 import json
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from werkzeug.utils import secure_filename
 
@@ -32,8 +32,32 @@ FAZE_DEFS = [
     {"key": "ostatni", "label": "Ostatní dodavatel"},
 ]
 FAZE_KEYS = [f["key"] for f in FAZE_DEFS]
+FAZE_LABEL_BY_KEY = {f["key"]: f["label"] for f in FAZE_DEFS}
 
 STAVY = ["nezahájeno", "probíhá", "hotovo"]
+
+# Předdefinované kroky procesu — stejné pro každou fázi/dodavatele.
+# Poslední řádek má editovatelný název (volný "doplňovací" krok).
+KROKY_DEFS = [
+    {"nazev": "Telefonický příjem reklamace",            "minuty": 15},
+    {"nazev": "Odchozí informační e-mail",                "minuty": 15},
+    {"nazev": "Příchozí e-mail, založení složky",         "minuty": 30},
+    {"nazev": "Založení ticketu",                         "minuty": 60},
+    {"nazev": "Komunikace VAT & ŠPC (č. fa z VW)",        "minuty": 30},
+    {"nazev": "Komunikace se zákazníkem (e-mail, tel.)",  "minuty": 30},
+    {"nazev": "Odeslání reklamace",                       "minuty": 60},
+    {"nazev": "Správa ticketu",                           "minuty": 30},
+    {"nazev": "Potvrzení o ukončení reklamace",           "minuty": 15},
+]
+EXTRA_KROK_MINUTY_DEFAULT = 15
+
+STAV_LABELS_HISTORIE = {"nová": "Otevřeno", "probíhá": "Probíhá", "vyřízeno": "Uzavřeno"}
+
+
+def _empty_kroky() -> list:
+    kroky = [{"nazev": d["nazev"], "minuty": d["minuty"], "editable_nazev": False} for d in KROKY_DEFS]
+    kroky.append({"nazev": "", "minuty": EXTRA_KROK_MINUTY_DEFAULT, "editable_nazev": True})
+    return kroky
 
 
 def _empty_faze(key: str) -> dict:
@@ -43,10 +67,53 @@ def _empty_faze(key: str) -> dict:
         "poznamka": "",
         "odpovedna_osoba": "",
         "prilohy": [],
+        "kroky": _empty_kroky(),
     }
     if key == "ostatni":
         f["dodavatel"] = ""
     return f
+
+
+def faze_total_minutes(faze: dict) -> float:
+    return sum((k.get("minuty") or 0) for k in faze.get("kroky", []))
+
+
+def reklamace_total_minutes(item: dict) -> float:
+    return sum(faze_total_minutes(item["faze"][k]) for k in FAZE_KEYS)
+
+
+def minutes_to_hours(minutes: float) -> float:
+    return round(minutes / 60, 1)
+
+
+def business_days_between(start: date, end: date) -> int:
+    """Počet pracovních dnů (po-pá) mezi start (včetně) a end (bez), min. 0."""
+    if not start or not end or end <= start:
+        return 0
+    days = 0
+    d = start
+    while d < end:
+        if d.weekday() < 5:
+            days += 1
+        d += timedelta(days=1)
+    return days
+
+
+def _sync_uzavreno(item: dict):
+    if overall_status(item) == "vyřízeno":
+        if not item.get("uzavreno"):
+            item["uzavreno"] = date.today().isoformat()
+    else:
+        item["uzavreno"] = None
+
+
+def aktualni_faze_label(item: dict) -> str:
+    probihajici = [FAZE_LABEL_BY_KEY[k] for k in FAZE_KEYS if item["faze"][k]["stav"] == "probíhá"]
+    if probihajici:
+        return ", ".join(probihajici)
+    if overall_status(item) == "vyřízeno":
+        return "—"
+    return "Nezahájeno"
 
 
 def _empty_store() -> dict:
@@ -72,6 +139,7 @@ def list_all(brand: str | None = None) -> list:
     items.sort(key=lambda i: i["vytvoreno"], reverse=True)
     for item in items:
         item["celkovy_stav"] = overall_status(item)
+        item["celkem_hodin"] = minutes_to_hours(reklamace_total_minutes(item))
     return items
 
 
@@ -89,6 +157,7 @@ def get_reklamace(cislo: str) -> dict | None:
     item = data.get("items", {}).get(cislo)
     if item:
         item["celkovy_stav"] = overall_status(item)
+        item["celkem_hodin"] = minutes_to_hours(reklamace_total_minutes(item))
     return item
 
 
@@ -120,6 +189,7 @@ def new_reklamace(brand: str, servisni_partner: str, kontaktni_osoba: str, datum
     data.setdefault("items", {})[cislo] = item
     save_all(data)
     item["celkovy_stav"] = overall_status(item)
+    item["celkem_hodin"] = minutes_to_hours(reklamace_total_minutes(item))
     return item
 
 
@@ -133,6 +203,7 @@ def update_header(cislo: str, patch: dict) -> dict | None:
             item[key] = patch[key]
     save_all(data)
     item["celkovy_stav"] = overall_status(item)
+    item["celkem_hodin"] = minutes_to_hours(reklamace_total_minutes(item))
     return item
 
 
@@ -147,8 +218,34 @@ def update_faze(cislo: str, faze_key: str, patch: dict) -> dict | None:
     for key in ("stav", "datum", "poznamka", "odpovedna_osoba", "dodavatel"):
         if key in patch:
             faze[key] = patch[key]
+    _sync_uzavreno(item)
     save_all(data)
     item["celkovy_stav"] = overall_status(item)
+    item["celkem_hodin"] = minutes_to_hours(reklamace_total_minutes(item))
+    return item
+
+
+def update_krok(cislo: str, faze_key: str, idx: int, patch: dict) -> dict | None:
+    if faze_key not in FAZE_KEYS:
+        return None
+    data = load_all()
+    item = data.get("items", {}).get(cislo)
+    if not item:
+        return None
+    kroky = item["faze"][faze_key].setdefault("kroky", _empty_kroky())
+    if idx < 0 or idx >= len(kroky):
+        return None
+    krok = kroky[idx]
+    if "minuty" in patch:
+        try:
+            krok["minuty"] = max(0, float(patch["minuty"]))
+        except (TypeError, ValueError):
+            krok["minuty"] = 0
+    if "nazev" in patch and krok.get("editable_nazev"):
+        krok["nazev"] = (patch["nazev"] or "").strip()
+    save_all(data)
+    item["celkovy_stav"] = overall_status(item)
+    item["celkem_hodin"] = minutes_to_hours(reklamace_total_minutes(item))
     return item
 
 
@@ -180,7 +277,40 @@ def add_priloha(cislo: str, faze_key: str, file_storage) -> dict | None:
         prilohy.append(filename)
     save_all(data)
     item["celkovy_stav"] = overall_status(item)
+    item["celkem_hodin"] = minutes_to_hours(reklamace_total_minutes(item))
     return item
+
+
+def history_row(item: dict) -> dict:
+    start = None
+    if item.get("datum_prijeti"):
+        try:
+            start = date.fromisoformat(item["datum_prijeti"])
+        except ValueError:
+            start = None
+    stav = overall_status(item)
+    end = date.today()
+    if item.get("uzavreno"):
+        try:
+            end = date.fromisoformat(item["uzavreno"])
+        except ValueError:
+            pass
+    total_minutes = reklamace_total_minutes(item)
+    return {
+        "cislo": item["cislo"],
+        "servisni_partner": item["servisni_partner"],
+        "kontaktni_osoba": item.get("kontaktni_osoba", ""),
+        "stav": stav,
+        "stav_label": STAV_LABELS_HISTORIE.get(stav, stav),
+        "doba_pracovnich_dni": business_days_between(start, end) if start else None,
+        "aktualni_faze": aktualni_faze_label(item),
+        "celkem_minut": total_minutes,
+        "celkem_hodin": minutes_to_hours(total_minutes),
+    }
+
+
+def history_all(brand: str | None = None) -> list:
+    return [history_row(i) for i in list_all(brand)]
 
 
 def remove_priloha(cislo: str, faze_key: str, filename: str) -> dict | None:
@@ -200,4 +330,5 @@ def remove_priloha(cislo: str, faze_key: str, filename: str) -> dict | None:
             path.unlink()
     save_all(data)
     item["celkovy_stav"] = overall_status(item)
+    item["celkem_hodin"] = minutes_to_hours(reklamace_total_minutes(item))
     return item

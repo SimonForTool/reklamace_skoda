@@ -85,6 +85,27 @@
   }
   .upload-row { margin-top: 12px; display: flex; align-items: center; gap: 10px; }
 
+  table.kroky { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 8px; }
+  table.kroky th {
+    background: var(--gray); color: #555; padding: 6px 8px; text-align: left;
+    font-size: 10.5px; text-transform: uppercase; letter-spacing: .3px;
+  }
+  table.kroky th:last-child, table.kroky td:last-child { text-align: right; width: 110px; }
+  table.kroky td { padding: 4px 8px; border-bottom: 1px solid #eee; vertical-align: middle; }
+  table.kroky td.nazev-text { color: #333; }
+  table.kroky input.krok-nazev { width: 100%; padding: 5px 7px; border: 1px solid var(--border); border-radius: 5px; font-size: 12.5px; }
+  table.kroky input.krok-minuty {
+    width: 80px; padding: 5px 7px; border: 1px solid var(--border); border-radius: 5px;
+    font-size: 12.5px; text-align: right;
+  }
+  table.kroky tfoot td { font-weight: 800; color: var(--blue); border-top: 2px solid var(--blue3); border-bottom: none; }
+  .stat-row { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 14px; }
+  .stat-box {
+    background: var(--gray); border-radius: 8px; padding: 8px 16px; min-width: 130px; text-align: center;
+  }
+  .stat-box .sv { font-size: 18px; font-weight: 800; color: var(--blue); }
+  .stat-box .sl { font-size: 10.5px; color: #666; margin-top: 2px; }
+
   .toast {
     position: fixed; bottom: 20px; right: 20px; background: #27ae60; color: #fff;
     padding: 10px 18px; border-radius: 8px; font-size: 13px; font-weight: 600;
@@ -100,6 +121,7 @@
 <header>
   <h1>🛠️ Reklamace {{ cislo }} <span style="opacity:.6;font-weight:600">({{ brand_label }})</span></h1>
   <a class="back" href="/{{ brand }}">← Přehled reklamací</a>
+  <a class="back" href="/{{ brand }}/historie">📊 Historie</a>
   <div class="spacer"></div>
   <span class="save-status" id="saveStatus"></span>
 </header>
@@ -137,6 +159,9 @@
             <label>Datum přijetí reklamace</label>
             <input id="hDatumPrijeti" type="date" onchange="changeHeader('datum_prijeti', this.value)">
           </div>
+        </div>
+        <div class="stat-row">
+          <div class="stat-box"><div class="sv" id="statCelkemHodin">0 h</div><div class="sl">Celkem odpracováno (vše)</div></div>
         </div>
       </div>
     </div>
@@ -179,6 +204,15 @@
         </div>
 
         <div class="field" style="margin-top:14px">
+          <label>Minutáž kroků</label>
+          <table class="kroky">
+            <thead><tr><th>Krok</th><th>Minuty</th></tr></thead>
+            <tbody id="kroky-{{ f.key }}"></tbody>
+            <tfoot><tr><td>Celkem</td><td id="kroky-total-{{ f.key }}">0 min</td></tr></tfoot>
+          </table>
+        </div>
+
+        <div class="field" style="margin-top:14px">
           <label>Přílohy</label>
           <ul class="priloha-list" id="prilohy-{{ f.key }}"></ul>
           <div class="upload-row">
@@ -211,6 +245,7 @@ function render() {
   document.getElementById("hServisniPartner").value = DATA.servisni_partner || "";
   document.getElementById("hKontaktniOsoba").value = DATA.kontaktni_osoba || "";
   document.getElementById("hDatumPrijeti").value = DATA.datum_prijeti || "";
+  document.getElementById("statCelkemHodin").textContent = `${(DATA.celkem_hodin ?? 0)} h`;
 
   for (const key of FAZE_KEYS) {
     const f = DATA.faze[key];
@@ -223,9 +258,27 @@ function render() {
       document.getElementById(`f-${key}-dodavatel`).value = f.dodavatel || "";
     }
     renderPrilohy(key, f.prilohy);
+    renderKroky(key, f.kroky || []);
     const dot = document.getElementById(`dot-${key}`);
     dot.className = "dot" + (f.stav === "hotovo" ? " hotovo" : f.stav === "probíhá" ? " probiha" : "");
   }
+}
+
+function renderKroky(key, kroky) {
+  const tbody = document.getElementById(`kroky-${key}`);
+  tbody.innerHTML = kroky.map((k, idx) => {
+    const nazevCell = k.editable_nazev
+      ? `<input class="krok-nazev" type="text" placeholder="Ostatní — doplnit, o jaký proces šlo"
+           value="${escapeHtml(k.nazev)}" onchange="changeKrokNazev('${key}', ${idx}, this.value)">`
+      : `<span class="nazev-text">${escapeHtml(k.nazev)}</span>`;
+    return `<tr>
+      <td>${nazevCell}</td>
+      <td><input class="krok-minuty" type="number" min="0" step="1" value="${k.minuty}"
+            onchange="changeKrokMinuty('${key}', ${idx}, this.value)"> min</td>
+    </tr>`;
+  }).join("");
+  const totalMin = kroky.reduce((s, k) => s + (Number(k.minuty) || 0), 0);
+  document.getElementById(`kroky-total-${key}`).textContent = `${totalMin} min (${(totalMin / 60).toFixed(1)} h)`;
 }
 
 function renderPrilohy(key, prilohy) {
@@ -268,6 +321,38 @@ async function changeFaze(key, field, value) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ [field]: value }),
+    });
+    DATA = await resp.json();
+    render();
+    setSaved();
+  } catch (e) {
+    setError();
+  }
+}
+
+async function changeKrokMinuty(key, idx, value) {
+  setSaving();
+  try {
+    const resp = await fetch(`/api/reklamace/${CISLO}/${key}/krok/${idx}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ minuty: value }),
+    });
+    DATA = await resp.json();
+    render();
+    setSaved();
+  } catch (e) {
+    setError();
+  }
+}
+
+async function changeKrokNazev(key, idx, value) {
+  setSaving();
+  try {
+    const resp = await fetch(`/api/reklamace/${CISLO}/${key}/krok/${idx}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nazev: value }),
     });
     DATA = await resp.json();
     render();
