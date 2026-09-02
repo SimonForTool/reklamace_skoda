@@ -1,10 +1,12 @@
 """
-Datový model a úložiště pro Reklamace Škoda.
+Datový model a úložiště pro Reklamace — správa reklamací pro více značek
+(ŠKODA, PORSCHE), každá se samostatnou číselnou řadou.
 
 Reklamace prochází 4 nezávislými fázemi (WETSy, GETAC, ACTIA IMEA,
 Ostatní dodavatel), z nichž každá se eviduje samostatně (stav, datum,
 poznámka, odpovědná osoba, přílohy). Interní číslo má formát
-REK-<rok>-<pořadové číslo v daném roce>, rok se odvozuje z data přijetí.
+<prefix značky>-<rok>-<pořadové číslo v daném roce>, rok se odvozuje
+z data přijetí. Číselná řada se počítá zvlášť pro každou značku.
 """
 from __future__ import annotations
 
@@ -16,6 +18,12 @@ from werkzeug.utils import secure_filename
 DATA_DIR = Path("data")
 DATA_PATH = DATA_DIR / "reklamace.json"
 UPLOAD_DIR = Path("uploads") / "reklamace"
+
+BRANDS = {
+    "skoda":   {"label": "ŠKODA",   "prefix": "SKO"},
+    "porsche": {"label": "PORSCHE", "prefix": "POR"},
+}
+DEFAULT_BRAND = "skoda"
 
 FAZE_DEFS = [
     {"key": "wetsy",   "label": "WETSy"},
@@ -56,9 +64,11 @@ def save_all(data: dict):
     DATA_PATH.write_text(json.dumps(data, ensure_ascii=False, indent=2))
 
 
-def list_all() -> list:
+def list_all(brand: str | None = None) -> list:
     data = load_all()
     items = list(data.get("items", {}).values())
+    if brand:
+        items = [i for i in items if i.get("znacka", DEFAULT_BRAND) == brand]
     items.sort(key=lambda i: i["vytvoreno"], reverse=True)
     for item in items:
         item["celkovy_stav"] = overall_status(item)
@@ -82,7 +92,9 @@ def get_reklamace(cislo: str) -> dict | None:
     return item
 
 
-def new_reklamace(servisni_partner: str, kontaktni_osoba: str, datum_prijeti: str) -> dict:
+def new_reklamace(brand: str, servisni_partner: str, kontaktni_osoba: str, datum_prijeti: str) -> dict:
+    if brand not in BRANDS:
+        raise ValueError(f"Neznámá značka: {brand}")
     data = load_all()
     try:
         year = date.fromisoformat(datum_prijeti).year
@@ -91,12 +103,14 @@ def new_reklamace(servisni_partner: str, kontaktni_osoba: str, datum_prijeti: st
         datum_prijeti = date.today().isoformat()
 
     counters = data.setdefault("counters", {})
-    year_key = str(year)
-    counters[year_key] = counters.get(year_key, 0) + 1
-    cislo = f"REK-{year}-{counters[year_key]:03d}"
+    counter_key = f"{brand}:{year}"
+    counters[counter_key] = counters.get(counter_key, 0) + 1
+    prefix = BRANDS[brand]["prefix"]
+    cislo = f"{prefix}-{year}-{counters[counter_key]:03d}"
 
     item = {
         "cislo": cislo,
+        "znacka": brand,
         "servisni_partner": servisni_partner.strip(),
         "kontaktni_osoba": kontaktni_osoba.strip(),
         "datum_prijeti": datum_prijeti,

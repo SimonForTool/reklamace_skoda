@@ -15,30 +15,48 @@ app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024  # 20 MB na požadavek/pří
 # ── HTML stránky ──────────────────────────────────────────────────────────────
 
 @app.route("/")
-def reklamace_list_page():
-    return render_template("reklamace_list.html")
+def landing_page():
+    return render_template("landing.html", brands=reklamace_data.BRANDS)
 
-@app.route("/reklamace/<cislo>")
-def reklamace_detail_page(cislo):
-    if not reklamace_data.get_reklamace(cislo):
+@app.route("/<brand>")
+def reklamace_list_page(brand):
+    if brand not in reklamace_data.BRANDS:
+        abort(404)
+    return render_template("reklamace_list.html", brand=brand,
+                            brand_label=reklamace_data.BRANDS[brand]["label"])
+
+@app.route("/<brand>/reklamace/<cislo>")
+def reklamace_detail_page(brand, cislo):
+    if brand not in reklamace_data.BRANDS:
+        abort(404)
+    item = reklamace_data.get_reklamace(cislo)
+    if not item or item.get("znacka", reklamace_data.DEFAULT_BRAND) != brand:
         abort(404, f"Reklamace {cislo} nenalezena.")
-    return render_template("reklamace_detail.html", cislo=cislo, faze_defs=reklamace_data.FAZE_DEFS)
+    return render_template("reklamace_detail.html", cislo=cislo, brand=brand,
+                            brand_label=reklamace_data.BRANDS[brand]["label"],
+                            faze_defs=reklamace_data.FAZE_DEFS)
 
 # ── API ───────────────────────────────────────────────────────────────────────
 
 @app.get("/api/reklamace")
 def api_reklamace_list():
-    return jsonify(reklamace_data.list_all())
+    brand = request.args.get("znacka")
+    if brand and brand not in reklamace_data.BRANDS:
+        return jsonify({"status": "error", "message": "Neznámá značka."}), 400
+    return jsonify(reklamace_data.list_all(brand))
 
 @app.post("/api/reklamace")
 def api_reklamace_create():
     body = request.get_json(force=True)
+    brand = body.get("znacka") or ""
     servisni_partner = (body.get("servisni_partner") or "").strip()
     kontaktni_osoba = (body.get("kontaktni_osoba") or "").strip()
     datum_prijeti = body.get("datum_prijeti") or ""
+    if brand not in reklamace_data.BRANDS:
+        return jsonify({"status": "error", "message": "Neznámá značka."}), 400
     if not servisni_partner or not datum_prijeti:
         return jsonify({"status": "error", "message": "Servisní partner a datum přijetí jsou povinné."}), 400
-    item = reklamace_data.new_reklamace(servisni_partner, kontaktni_osoba, datum_prijeti)
+    item = reklamace_data.new_reklamace(brand, servisni_partner, kontaktni_osoba, datum_prijeti)
     return jsonify(item)
 
 @app.get("/api/reklamace/<cislo>")

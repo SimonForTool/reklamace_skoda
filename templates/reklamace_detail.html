@@ -98,8 +98,8 @@
 <body>
 
 <header>
-  <h1>🛠️ Reklamace {{ cislo }}</h1>
-  <a class="back" href="/">← Přehled reklamací</a>
+  <h1>🛠️ Reklamace {{ cislo }} <span style="opacity:.6;font-weight:600">({{ brand_label }})</span></h1>
+  <a class="back" href="/{{ brand }}">← Přehled reklamací</a>
   <div class="spacer"></div>
   <span class="save-status" id="saveStatus"></span>
 </header>

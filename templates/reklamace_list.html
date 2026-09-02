@@ -100,7 +100,8 @@
 <body>
 
 <header>
-  <h1>🛠️ Reklamace Škoda</h1>
+  <h1>🛠️ Reklamace {{ brand_label }}</h1>
+  <a class="home" href="/">← Výběr značky</a>
   <div class="spacer"></div>
   <button class="btn btn-new" id="toggleNewBtn" onclick="toggleNewForm()">➕ Nová reklamace</button>
 </header>
@@ -144,6 +145,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
+const BRAND = {{ brand | tojson }};
 const STAV_LABELS = { "nová": "Nová", "probíhá": "Probíhá", "vyřízeno": "Vyřízeno" };
 const STAV_CLASS  = { "nová": "nova", "probíhá": "probiha", "vyřízeno": "vyrizeno" };
 
@@ -154,7 +156,7 @@ function fmtDate(iso) {
 }
 
 async function loadList() {
-  const resp = await fetch("/api/reklamace");
+  const resp = await fetch(`/api/reklamace?znacka=${BRAND}`);
   const items = await resp.json();
   render(items);
 }
@@ -175,7 +177,7 @@ function render(items) {
       const cls = s === "hotovo" ? "hotovo" : (s === "probíhá" ? "probiha" : "");
       return `<span class="dot ${cls}" title="${k}: ${s}"></span>`;
     }).join("");
-    html += `<tr class="row" onclick="location.href='/reklamace/${it.cislo}'">
+    html += `<tr class="row" onclick="location.href='/${BRAND}/reklamace/${it.cislo}'">
       <td><strong>${it.cislo}</strong></td>
       <td>${escapeHtml(it.servisni_partner)}</td>
       <td>${escapeHtml(it.kontaktni_osoba || "—")}</td>
@@ -219,11 +221,11 @@ async function createReklamace() {
     const resp = await fetch("/api/reklamace", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ servisni_partner, kontaktni_osoba, datum_prijeti }),
+      body: JSON.stringify({ znacka: BRAND, servisni_partner, kontaktni_osoba, datum_prijeti }),
     });
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.message || "Chyba při ukládání.");
-    location.href = `/reklamace/${data.cislo}`;
+    location.href = `/${BRAND}/reklamace/${data.cislo}`;
   } catch (e) {
     err.textContent = e.message;
     err.style.display = "block";
