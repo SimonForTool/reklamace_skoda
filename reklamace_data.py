@@ -147,11 +147,10 @@ def business_days_between(start: date, end: date) -> int:
 
 
 def _sync_uzavreno(item: dict):
-    if overall_status(item) == "vyřízeno":
-        if not item.get("uzavreno"):
-            item["uzavreno"] = date.today().isoformat()
-    else:
-        item["uzavreno"] = None
+    """Datum ukončení je editovatelné ručně na detailu reklamace — jen
+    doplní výchozí hodnotu při uzavření všech fází, nikdy ho nemaže."""
+    if overall_status(item) == "vyřízeno" and not item.get("uzavreno"):
+        item["uzavreno"] = date.today().isoformat()
 
 
 def aktualni_faze_label(item: dict) -> str:
@@ -230,6 +229,8 @@ def new_reklamace(brand: str, servisni_partner: str, kontaktni_osoba: str, datum
         "servisni_partner": servisni_partner.strip(),
         "kontaktni_osoba": kontaktni_osoba.strip(),
         "datum_prijeti": datum_prijeti,
+        "uzavreno": None,
+        "odpovedna_osoba": "",
         "vytvoreno": datetime.now().isoformat(timespec="seconds"),
         "faze": {k: _empty_faze(k) for k in FAZE_KEYS},
     }
@@ -245,9 +246,9 @@ def update_header(cislo: str, patch: dict) -> dict | None:
     item = data.get("items", {}).get(cislo)
     if not item:
         return None
-    for key in ("servisni_partner", "kontaktni_osoba", "datum_prijeti"):
+    for key in ("servisni_partner", "kontaktni_osoba", "datum_prijeti", "uzavreno", "odpovedna_osoba"):
         if key in patch:
-            item[key] = patch[key]
+            item[key] = patch[key] or (None if key == "uzavreno" else "")
     save_all(data)
     item["celkovy_stav"] = overall_status(item)
     item["celkem_hodin"] = minutes_to_hours(reklamace_total_minutes(item))
@@ -347,6 +348,7 @@ def history_row(item: dict) -> dict:
         "cislo": item["cislo"],
         "servisni_partner": item["servisni_partner"],
         "kontaktni_osoba": item.get("kontaktni_osoba", ""),
+        "odpovedna_osoba": item.get("odpovedna_osoba", ""),
         "datum_prijeti": item.get("datum_prijeti"),
         "uzavreno": item.get("uzavreno"),
         "stav": stav,

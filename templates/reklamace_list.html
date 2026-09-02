@@ -172,15 +172,25 @@ async function loadList() {
   render(rows);
 }
 
+function initials(name) {
+  if (!name || !name.trim()) return "";
+  return name.trim().split(/\s+/).map(p => p[0].toUpperCase()).join("");
+}
+
 function renderStats(rows) {
   const otevrene = rows.filter(r => r.stav !== "vyřízeno").length;
-  const uzavrene = rows.filter(r => r.stav === "vyřízeno").length;
+  const uzavrene = rows.filter(r => r.stav === "vyřízeno");
   const celkemHodin = rows.reduce((s, r) => s + (r.celkem_hodin || 0), 0);
+  const dobaUzavrenych = uzavrene.filter(r => r.doba_pracovnich_dni != null);
+  const prumerDnu = dobaUzavrenych.length
+    ? dobaUzavrenych.reduce((s, r) => s + r.doba_pracovnich_dni, 0) / dobaUzavrenych.length
+    : null;
   document.getElementById("stats").innerHTML = `
     <div class="stat-box"><div class="sv">${rows.length}</div><div class="sl">Celkem reklamací</div></div>
     <div class="stat-box"><div class="sv">${otevrene}</div><div class="sl">Otevřené / probíhající</div></div>
-    <div class="stat-box"><div class="sv">${uzavrene}</div><div class="sl">Uzavřené</div></div>
-    <div class="stat-box"><div class="sv">${celkemHodin.toFixed(1)} h</div><div class="sl">Odpracováno celkem</div></div>`;
+    <div class="stat-box"><div class="sv">${uzavrene.length}</div><div class="sl">Uzavřené</div></div>
+    <div class="stat-box"><div class="sv">${celkemHodin.toFixed(1)} h</div><div class="sl">Odpracováno celkem</div></div>
+    <div class="stat-box"><div class="sv">${prumerDnu != null ? prumerDnu.toFixed(1) : "—"}</div><div class="sl">Průměr prac. dnů / uzavřenou reklamaci</div></div>`;
 }
 
 function render(rows) {
@@ -191,18 +201,24 @@ function render(rows) {
   }
   let html = `<table class="grid"><thead><tr>
     <th>Číslo</th><th>Servisní partner</th><th>Kontaktní osoba</th>
-    <th>Datum přijetí</th><th>Stav</th><th>Doba trvání (prac. dny)</th>
-    <th>Aktuální fáze</th><th>Celkem hodin</th>
+    <th>Datum přijetí</th><th>Datum ukončení</th><th>Stav</th><th>Doba trvání (prac. dny)</th>
+    <th>Aktuální fáze</th><th>Odpovědná osoba</th><th>Celkem hodin</th>
   </tr></thead><tbody>`;
   for (const r of rows) {
+    const inits = initials(r.odpovedna_osoba);
+    const odpTd = inits
+      ? `<span title="${escapeHtml(r.odpovedna_osoba)}" style="cursor:help;border-bottom:1px dotted #999">${inits}</span>`
+      : "—";
     html += `<tr class="row" onclick="location.href='/${BRAND}/reklamace/${r.cislo}'">
       <td><strong>${r.cislo}</strong></td>
       <td>${escapeHtml(r.servisni_partner)}</td>
       <td>${escapeHtml(r.kontaktni_osoba || "—")}</td>
       <td>${fmtDate(r.datum_prijeti)}</td>
+      <td>${fmtDate(r.uzavreno)}</td>
       <td><span class="badge ${STAV_CLASS[r.stav]}">${escapeHtml(r.stav_label)}</span></td>
       <td class="num">${r.doba_pracovnich_dni ?? "—"}</td>
       <td>${escapeHtml(r.aktualni_faze)}</td>
+      <td>${odpTd}</td>
       <td class="num">${r.celkem_hodin} h</td>
     </tr>`;
   }

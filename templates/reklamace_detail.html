@@ -158,6 +158,14 @@
             <label>Datum přijetí reklamace</label>
             <input id="hDatumPrijeti" type="date" onchange="changeHeader('datum_prijeti', this.value)">
           </div>
+          <div class="field">
+            <label>Datum ukončení reklamace</label>
+            <input id="hUzavreno" type="date" onchange="changeHeader('uzavreno', this.value)">
+          </div>
+          <div class="field">
+            <label>Odpovědná osoba (za reklamaci)</label>
+            <input id="hOdpovednaOsoba" type="text" placeholder="Celé jméno" onchange="changeHeader('odpovedna_osoba', this.value)">
+          </div>
         </div>
         <div class="stat-row">
           <div class="stat-box"><div class="sv" id="statCelkemHodin">0 h</div><div class="sl">Celkem odpracováno (vše)</div></div>
@@ -244,6 +252,8 @@ function render() {
   document.getElementById("hServisniPartner").value = DATA.servisni_partner || "";
   document.getElementById("hKontaktniOsoba").value = DATA.kontaktni_osoba || "";
   document.getElementById("hDatumPrijeti").value = DATA.datum_prijeti || "";
+  document.getElementById("hUzavreno").value = DATA.uzavreno || "";
+  document.getElementById("hOdpovednaOsoba").value = DATA.odpovedna_osoba || "";
   document.getElementById("statCelkemHodin").textContent = `${(DATA.celkem_hodin ?? 0)} h`;
 
   for (const key of FAZE_KEYS) {
