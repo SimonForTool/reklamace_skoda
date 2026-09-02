@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reklamace Škoda</title>
+<style>
+  :root {
+    --blue:    #1F4E79;
+    --blue2:   #2E75B6;
+    --blue3:   #BDD7EE;
+    --gray:    #f4f5f7;
+    --border:  #c8cdd4;
+    --text:    #1a1a2e;
+    --green:   #27ae60;
+    --orange:  #e67e22;
+    --red:     #e74c3c;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, "Segoe UI", Arial, sans-serif;
+         font-size: 13px; color: var(--text); background: #eef2f7; }
+
+  header {
+    background: var(--blue); color: #fff; padding: 0 24px;
+    display: flex; align-items: center; gap: 14px; height: 54px;
+    position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,.25);
+  }
+  header h1 { font-size: 16px; font-weight: 700; margin: 0; white-space: nowrap; }
+  header a.home { color: rgba(255,255,255,.7); text-decoration: none; font-size: 12px; }
+  header a.home:hover { color: #fff; }
+  header .spacer { flex: 1; }
+
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 7px 16px; border-radius: 6px; border: none;
+    cursor: pointer; font-size: 12.5px; font-weight: 600;
+    transition: opacity .15s; white-space: nowrap;
+  }
+  .btn:hover { opacity: .85; }
+  .btn-new { background: #27ae60; color: #fff; }
+  .btn-cancel { background: rgba(255,255,255,.15); color: #fff; }
+
+  main { padding: 20px 24px; max-width: 1100px; margin: 0 auto; }
+
+  .card {
+    background: #fff; border-radius: 10px; box-shadow: 0 1px 4px rgba(0,0,0,.1);
+    overflow: hidden; margin-bottom: 20px;
+  }
+  .card-header {
+    background: var(--blue); color: #fff; padding: 10px 16px;
+    font-weight: 700; font-size: 13px; display: flex; align-items: center; gap: 8px;
+  }
+  .card-body { padding: 16px; }
+
+  #newForm { display: none; }
+  #newForm.show { display: block; }
+  .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
+  .field label { display: block; font-size: 11.5px; color: #555; margin-bottom: 4px; font-weight: 600; }
+  .field input {
+    width: 100%; padding: 7px 9px; border: 1px solid var(--border);
+    border-radius: 6px; font-size: 13px;
+  }
+  .form-actions { margin-top: 16px; display: flex; gap: 10px; }
+  .form-error { color: var(--red); font-size: 12px; margin-top: 8px; display: none; }
+
+  table.grid { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  table.grid th {
+    background: var(--blue); color: #fff; padding: 8px 10px; text-align: left;
+    font-size: 11px; white-space: nowrap;
+  }
+  table.grid td { padding: 8px 10px; border-bottom: 1px solid #eee; }
+  table.grid tr.row:hover td { background: #f7fafc; cursor: pointer; }
+  table.grid td.center { text-align: center; }
+
+  .badge {
+    display: inline-block; padding: 3px 10px; border-radius: 12px;
+    font-size: 11px; font-weight: 700; color: #fff;
+  }
+  .badge.nova     { background: #7f8c9a; }
+  .badge.probiha  { background: var(--orange); }
+  .badge.vyrizeno { background: var(--green); }
+
+  .dots { display: inline-flex; gap: 4px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: #dfe4ea; }
+  .dot.hotovo    { background: var(--green); }
+  .dot.probiha   { background: var(--orange); }
+
+  .empty { padding: 30px; text-align: center; color: #888; }
+
+  .toast {
+    position: fixed; bottom: 20px; right: 20px; background: #27ae60; color: #fff;
+    padding: 10px 18px; border-radius: 8px; font-size: 13px; font-weight: 600;
+    box-shadow: 0 4px 12px rgba(0,0,0,.2); opacity: 0; transition: opacity .3s;
+    pointer-events: none; z-index: 999;
+  }
+  .toast.show { opacity: 1; }
+  .toast.error { background: #e74c3c; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🛠️ Reklamace Škoda</h1>
+  <div class="spacer"></div>
+  <button class="btn btn-new" id="toggleNewBtn" onclick="toggleNewForm()">➕ Nová reklamace</button>
+</header>
+
+<main>
+
+  <div class="card" id="newForm">
+    <div class="card-header">➕ Nová reklamace</div>
+    <div class="card-body">
+      <div class="form-grid">
+        <div class="field">
+          <label>Servisní partner *</label>
+          <input id="fServisniPartner" type="text" placeholder="Název servisního partnera">
+        </div>
+        <div class="field">
+          <label>Kontaktní osoba</label>
+          <input id="fKontaktniOsoba" type="text" placeholder="Jméno kontaktní osoby">
+        </div>
+        <div class="field">
+          <label>Datum přijetí reklamace *</label>
+          <input id="fDatumPrijeti" type="date">
+        </div>
+      </div>
+      <div class="form-error" id="formError"></div>
+      <div class="form-actions">
+        <button class="btn btn-new" onclick="createReklamace()">✔️ Založit reklamaci</button>
+        <button class="btn btn-cancel" style="background:#ccc;color:#333" onclick="toggleNewForm(false)">Zrušit</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">📋 Přehled reklamací</div>
+    <div class="card-body" id="listBody">
+      <div class="empty">Načítám…</div>
+    </div>
+  </div>
+
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const STAV_LABELS = { "nová": "Nová", "probíhá": "Probíhá", "vyřízeno": "Vyřízeno" };
+const STAV_CLASS  = { "nová": "nova", "probíhá": "probiha", "vyřízeno": "vyrizeno" };
+
+function fmtDate(iso) {
+  if (!iso) return "—";
+  const [y, m, d] = iso.split("-");
+  return `${d}.${m}.${y}`;
+}
+
+async function loadList() {
+  const resp = await fetch("/api/reklamace");
+  const items = await resp.json();
+  render(items);
+}
+
+function render(items) {
+  const body = document.getElementById("listBody");
+  if (!items.length) {
+    body.innerHTML = `<div class="empty">Zatím žádné reklamace. Založte první tlačítkem "Nová reklamace".</div>`;
+    return;
+  }
+  let html = `<table class="grid"><thead><tr>
+    <th>Číslo</th><th>Servisní partner</th><th>Kontaktní osoba</th>
+    <th>Datum přijetí</th><th>Fáze</th><th>Stav</th>
+  </tr></thead><tbody>`;
+  for (const it of items) {
+    const dots = ["wetsy","getac","actia","ostatni"].map(k => {
+      const s = it.faze[k].stav;
+      const cls = s === "hotovo" ? "hotovo" : (s === "probíhá" ? "probiha" : "");
+      return `<span class="dot ${cls}" title="${k}: ${s}"></span>`;
+    }).join("");
+    html += `<tr class="row" onclick="location.href='/reklamace/${it.cislo}'">
+      <td><strong>${it.cislo}</strong></td>
+      <td>${escapeHtml(it.servisni_partner)}</td>
+      <td>${escapeHtml(it.kontaktni_osoba || "—")}</td>
+      <td>${fmtDate(it.datum_prijeti)}</td>
+      <td class="center"><span class="dots">${dots}</span></td>
+      <td><span class="badge ${STAV_CLASS[it.celkovy_stav]}">${STAV_LABELS[it.celkovy_stav]}</span></td>
+    </tr>`;
+  }
+  html += "</tbody></table>";
+  body.innerHTML = html;
+}
+
+function escapeHtml(s) {
+  return (s || "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+
+function toggleNewForm(show) {
+  const form = document.getElementById("newForm");
+  const willShow = show === undefined ? !form.classList.contains("show") : show;
+  form.classList.toggle("show", willShow);
+  if (willShow) {
+    document.getElementById("fDatumPrijeti").valueAsDate = new Date();
+    document.getElementById("fServisniPartner").focus();
+  }
+}
+
+async function createReklamace() {
+  const servisni_partner = document.getElementById("fServisniPartner").value.trim();
+  const kontaktni_osoba = document.getElementById("fKontaktniOsoba").value.trim();
+  const datum_prijeti = document.getElementById("fDatumPrijeti").value;
+  const err = document.getElementById("formError");
+  err.style.display = "none";
+
+  if (!servisni_partner || !datum_prijeti) {
+    err.textContent = "Vyplňte servisního partnera a datum přijetí.";
+    err.style.display = "block";
+    return;
+  }
+
+  try {
+    const resp = await fetch("/api/reklamace", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ servisni_partner, kontaktni_osoba, datum_prijeti }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.message || "Chyba při ukládání.");
+    location.href = `/reklamace/${data.cislo}`;
+  } catch (e) {
+    err.textContent = e.message;
+    err.style.display = "block";
+  }
+}
+
+function showToast(msg, isError = false) {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.className = "toast show" + (isError ? " error" : "");
+  setTimeout(() => { t.className = "toast"; }, 3000);
+}
+
+loadList();
+</script>
+</body>
+</html>
