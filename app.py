@@ -37,7 +37,8 @@ def reklamace_detail_page(brand, cislo):
         abort(404, f"Reklamace {cislo} nenalezena.")
     return render_template("reklamace_detail.html", cislo=cislo, brand=brand,
                             brand_label=reklamace_data.BRANDS[brand]["label"],
-                            faze_defs=reklamace_data.FAZE_DEFS)
+                            faze_defs=reklamace_data.FAZE_DEFS,
+                            krok_katalog=reklamace_data.KROK_KATALOG)
 
 @app.route("/<brand>/historie")
 def reklamace_historie_page(brand):
@@ -99,10 +100,26 @@ def api_reklamace_faze_update(cislo, faze_key):
         abort(404, "Reklamace nebo fáze nenalezena.")
     return jsonify(item)
 
+@app.post("/api/reklamace/<cislo>/<faze_key>/krok")
+def api_reklamace_krok_add(cislo, faze_key):
+    body = request.get_json(force=True)
+    nazev = (body.get("nazev") or "").strip()
+    item = reklamace_data.add_krok(cislo, faze_key, nazev)
+    if not item:
+        abort(404, "Reklamace nebo fáze nenalezena.")
+    return jsonify(item)
+
 @app.post("/api/reklamace/<cislo>/<faze_key>/krok/<int:idx>")
 def api_reklamace_krok_update(cislo, faze_key, idx):
     body = request.get_json(force=True)
     item = reklamace_data.update_krok(cislo, faze_key, idx, body)
+    if not item:
+        abort(404, "Reklamace, fáze nebo krok nenalezen.")
+    return jsonify(item)
+
+@app.delete("/api/reklamace/<cislo>/<faze_key>/krok/<int:idx>")
+def api_reklamace_krok_delete(cislo, faze_key, idx):
+    item = reklamace_data.remove_krok(cislo, faze_key, idx)
     if not item:
         abort(404, "Reklamace, fáze nebo krok nenalezen.")
     return jsonify(item)

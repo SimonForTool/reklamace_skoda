@@ -36,63 +36,71 @@ FAZE_LABEL_BY_KEY = {f["key"]: f["label"] for f in FAZE_DEFS}
 
 STAVY = ["nezahájeno", "probíhá", "hotovo"]
 
-# Předdefinované kroky procesu — podle reálné šablony "VAT Výkaz hodin"
-# (předávací protokol pro fakturaci). WETSy má 7 kroků, GETAC a ACTIA IMEA
-# mají svých 9 (zpracování reklamovaného zařízení u konkrétního dodavatele).
-# Ostatní dodavatel přebírá stejnou strukturu jako GETAC/ACTIA (obecně).
-# Minuty u WETSy jsou podle zadání; u GETAC/ACTIA/Ostatní jde o výchozí
-# odhad podle povahy kroku — kdykoliv editovatelné přímo v appce.
-KROKY_DEFS_BY_FAZE = {
-    "wetsy": [
-        {"nazev": "Telefonický příjem reklamace",           "minuty": 15},
-        {"nazev": "Odchozí informační e-mail",               "minuty": 15},
-        {"nazev": "Příchozí e-mail, založení složky",        "minuty": 30},
-        {"nazev": "Založení ticket WETSy",                   "minuty": 60},
-        {"nazev": "Komunikace VAT & ŠPC (č. fa z VW)",       "minuty": 30},
-        {"nazev": "Komunikace se zák. (e-mail, tel.)",       "minuty": 30},
-        {"nazev": "Správa ticketu WETSY",                    "minuty": 30},
-    ],
-    "getac": [
-        {"nazev": "Založení ticketu GETAC",                  "minuty": 60},
-        {"nazev": "Komunikace s GETAC",                      "minuty": 30},
-        {"nazev": "Komunikace se zákazníkem",                "minuty": 30},
-        {"nazev": "Odeslání zařízení (servis, výměna)",      "minuty": 30},
-        {"nazev": "Správa ticketu GETAC",                    "minuty": 30},
-        {"nazev": "Příjem reklamovaného zař.",                "minuty": 15},
-        {"nazev": "Zpětná vazba u zákazníka",                "minuty": 15},
-        {"nazev": "Uzavření ticketu",                        "minuty": 15},
-        {"nazev": "Dokument potvrzení",                      "minuty": 15},
-    ],
-    "actia": [
-        {"nazev": "Založení ticketu ACTIA",                  "minuty": 60},
-        {"nazev": "Komunikace s ACTIA",                      "minuty": 30},
-        {"nazev": "Komunikace se zákazníkem",                "minuty": 30},
-        {"nazev": "Odeslání zařízení (servis, výměna)",      "minuty": 30},
-        {"nazev": "Správa ticketu ACTIA",                    "minuty": 30},
-        {"nazev": "Příjem reklamovaného zař.",                "minuty": 15},
-        {"nazev": "Zpětná vazba u zákazníka",                "minuty": 15},
-        {"nazev": "Uzavření ticketu",                        "minuty": 15},
-        {"nazev": "Dokument potvrzení",                      "minuty": 15},
-    ],
-    "ostatni": [
-        {"nazev": "Založení ticketu",                        "minuty": 60},
-        {"nazev": "Komunikace s dodavatelem",                "minuty": 30},
-        {"nazev": "Komunikace se zákazníkem",                "minuty": 30},
-        {"nazev": "Odeslání zařízení (servis, výměna)",      "minuty": 30},
-        {"nazev": "Správa ticketu",                          "minuty": 30},
-        {"nazev": "Příjem reklamovaného zař.",                "minuty": 15},
-        {"nazev": "Zpětná vazba u zákazníka",                "minuty": 15},
-        {"nazev": "Uzavření ticketu",                        "minuty": 15},
-        {"nazev": "Dokument potvrzení",                      "minuty": 15},
-    ],
-}
+# Katalog kroků procesu — společný pro všechny 4 záložky (WETSy, GETAC,
+# ACTIA IMEA, Ostatní dodavatel). V appce se řádky přidávají přes rolovací
+# seznam; každá volba předvyplní obvyklou dobu v minutách (editovatelnou).
+OSTATNI_KATALOG_LABEL = "Ostatní - doplnit"
+KROK_KATALOG = [
+    {"nazev": "Telefonický příjem reklamace",           "minuty": 15},
+    {"nazev": "Odchozí informační e-mail",               "minuty": 15},
+    {"nazev": "Příchozí e-mail, založení složky",        "minuty": 30},
+    {"nazev": "Založení ticket",                         "minuty": 60},
+    {"nazev": "Komunikace VAT & ŠPC (č. fa z VW)",       "minuty": 30},
+    {"nazev": "Komunikace se zák. (e-mail, tel.)",       "minuty": 30},
+    {"nazev": "Odeslání reklamace",                      "minuty": 60},
+    {"nazev": "Správa ticketu",                          "minuty": 30},
+    {"nazev": "Potvrzení o ukončení reklamace",          "minuty": 15},
+    {"nazev": OSTATNI_KATALOG_LABEL,                     "minuty": 15},
+]
+KROK_KATALOG_BY_NAZEV = {k["nazev"]: k for k in KROK_KATALOG}
 EXTRA_KROK_MINUTY_DEFAULT = 15
 
 STAV_LABELS_HISTORIE = {"nová": "Otevřeno", "probíhá": "Probíhá", "vyřízeno": "Uzavřeno"}
 
-# Export do Excelu (předávací protokol pro fakturaci) — jen WETSy/GETAC/ACTIA
-# mají v reálné šabloně vlastní blok sloupců; Ostatní dodavatel se promítá
-# jen do celkového součtu (TOTAL), nemá dedikovaný blok.
+# Sloupce reálné exportní šablony "VAT Výkaz hodin" (předávací protokol pro
+# fakturaci) — jen WETSy/GETAC/ACTIA mají v šabloně vlastní blok sloupců;
+# Ostatní dodavatel se promítá jen do celkového součtu (TOTAL), nemá
+# dedikovaný blok. Appka teď nabízí jeden společný katalog kroků na všech
+# záložkách, takže se název kroku ne vždy doslova shoduje s názvem sloupce
+# v šabloně (u WETSy jsou 2 běžné synonyma, viz WETSY_EXPORT_SYNONYMS) —
+# nespárované kroky se do rozpisu sloupců nezapočítají, ale do TOTALu ano.
+EXPORT_KROKY_BY_FAZE = {
+    "wetsy": [
+        {"nazev": "Telefonický příjem reklamace"},
+        {"nazev": "Odchozí informační e-mail"},
+        {"nazev": "Příchozí e-mail, založení složky"},
+        {"nazev": "Založení ticket WETSy"},
+        {"nazev": "Komunikace VAT & ŠPC (č. fa z VW)"},
+        {"nazev": "Komunikace se zák. (e-mail, tel.)"},
+        {"nazev": "Správa ticketu WETSY"},
+    ],
+    "getac": [
+        {"nazev": "Založení ticketu GETAC"},
+        {"nazev": "Komunikace s GETAC"},
+        {"nazev": "Komunikace se zákazníkem"},
+        {"nazev": "Odeslání zařízení (servis, výměna)"},
+        {"nazev": "Správa ticketu GETAC"},
+        {"nazev": "Příjem reklamovaného zař."},
+        {"nazev": "Zpětná vazba u zákazníka"},
+        {"nazev": "Uzavření ticketu"},
+        {"nazev": "Dokument potvrzení"},
+    ],
+    "actia": [
+        {"nazev": "Založení ticketu ACTIA"},
+        {"nazev": "Komunikace s ACTIA"},
+        {"nazev": "Komunikace se zákazníkem"},
+        {"nazev": "Odeslání zařízení (servis, výměna)"},
+        {"nazev": "Správa ticketu ACTIA"},
+        {"nazev": "Příjem reklamovaného zař."},
+        {"nazev": "Zpětná vazba u zákazníka"},
+        {"nazev": "Uzavření ticketu"},
+        {"nazev": "Dokument potvrzení"},
+    ],
+}
+WETSY_EXPORT_SYNONYMS = {
+    "Založení ticket": "Založení ticket WETSy",
+    "Správa ticketu": "Správa ticketu WETSY",
+}
 EXPORT_BLOKY = [
     ("wetsy", "WETSy", "E"),
     ("getac", "GETAC", "L"),
@@ -100,11 +108,8 @@ EXPORT_BLOKY = [
 ]
 
 
-def _empty_kroky(faze_key: str) -> list:
-    defs = KROKY_DEFS_BY_FAZE.get(faze_key, [])
-    kroky = [{"nazev": d["nazev"], "minuty": d["minuty"], "editable_nazev": False} for d in defs]
-    kroky.append({"nazev": "", "minuty": EXTRA_KROK_MINUTY_DEFAULT, "editable_nazev": True})
-    return kroky
+def _empty_kroky() -> list:
+    return []
 
 
 def _empty_faze(key: str) -> dict:
@@ -114,7 +119,7 @@ def _empty_faze(key: str) -> dict:
         "poznamka": "",
         "odpovedna_osoba": "",
         "prilohy": [],
-        "kroky": _empty_kroky(key),
+        "kroky": _empty_kroky(),
     }
     if key == "ostatni":
         f["dodavatel"] = ""
@@ -280,7 +285,7 @@ def update_krok(cislo: str, faze_key: str, idx: int, patch: dict) -> dict | None
     item = data.get("items", {}).get(cislo)
     if not item:
         return None
-    kroky = item["faze"][faze_key].setdefault("kroky", _empty_kroky(faze_key))
+    kroky = item["faze"][faze_key].setdefault("kroky", _empty_kroky())
     if idx < 0 or idx >= len(kroky):
         return None
     krok = kroky[idx]
@@ -291,6 +296,45 @@ def update_krok(cislo: str, faze_key: str, idx: int, patch: dict) -> dict | None
             krok["minuty"] = 0
     if "nazev" in patch and krok.get("editable_nazev"):
         krok["nazev"] = (patch["nazev"] or "").strip()
+    save_all(data)
+    item["celkovy_stav"] = overall_status(item)
+    item["celkem_hodin"] = minutes_to_hours(reklamace_total_minutes(item))
+    return item
+
+
+def add_krok(cislo: str, faze_key: str, nazev: str) -> dict | None:
+    if faze_key not in FAZE_KEYS:
+        return None
+    data = load_all()
+    item = data.get("items", {}).get(cislo)
+    if not item:
+        return None
+
+    is_ostatni = not nazev or nazev == OSTATNI_KATALOG_LABEL
+    katalog = KROK_KATALOG_BY_NAZEV.get(nazev)
+    krok = {
+        "nazev": "" if is_ostatni else nazev,
+        "minuty": katalog["minuty"] if katalog else EXTRA_KROK_MINUTY_DEFAULT,
+        "editable_nazev": is_ostatni,
+    }
+    item["faze"][faze_key].setdefault("kroky", _empty_kroky()).append(krok)
+    save_all(data)
+    item["celkovy_stav"] = overall_status(item)
+    item["celkem_hodin"] = minutes_to_hours(reklamace_total_minutes(item))
+    return item
+
+
+def remove_krok(cislo: str, faze_key: str, idx: int) -> dict | None:
+    if faze_key not in FAZE_KEYS:
+        return None
+    data = load_all()
+    item = data.get("items", {}).get(cislo)
+    if not item:
+        return None
+    kroky = item["faze"][faze_key].setdefault("kroky", _empty_kroky())
+    if idx < 0 or idx >= len(kroky):
+        return None
+    kroky.pop(idx)
     save_all(data)
     item["celkovy_stav"] = overall_status(item)
     item["celkem_hodin"] = minutes_to_hours(reklamace_total_minutes(item))
@@ -364,6 +408,16 @@ def history_all(brand: str | None = None) -> list:
     return [history_row(i) for i in list_all(brand)]
 
 
+def _match_export_col_idx(faze_key: str, nazev: str, export_steps: list) -> int | None:
+    candidates = {nazev}
+    if faze_key == "wetsy" and nazev in WETSY_EXPORT_SYNONYMS:
+        candidates.add(WETSY_EXPORT_SYNONYMS[nazev])
+    for i, step in enumerate(export_steps):
+        if step["nazev"] in candidates:
+            return i
+    return None
+
+
 def export_xlsx(brand: str, out_path: Path) -> Path:
     """Export do Excelu ve formátu předávacího protokolu pro fakturaci
     (podle vzoru "VAT Výkaz hodin"): jeden řádek na reklamaci, sloupcové
@@ -402,7 +456,7 @@ def export_xlsx(brand: str, out_path: Path) -> Path:
 
     total_col_idx = 4
     for faze_key, label, start_col in EXPORT_BLOKY:
-        steps = KROKY_DEFS_BY_FAZE[faze_key]
+        steps = EXPORT_KROKY_BY_FAZE[faze_key]
         start_idx = column_index_from_string(start_col)
         end_idx = start_idx + len(steps) - 1
         end_col = get_column_letter(end_idx)
@@ -455,27 +509,29 @@ def export_xlsx(brand: str, out_path: Path) -> Path:
         c3.number_format = "DD.MM.YYYY"
         ws.cell(row=row, column=4, value=doba).font = NORMAL
 
-        celkem_hodin = 0.0
+        # Kroky se teď přidávají volně (společný katalog na všech záložkách),
+        # takže se do sloupců šablony párují podle NÁZVU (ne pozice) — víc
+        # kroků se stejným názvem se ve sloupci sečte. Co nenajde párový
+        # sloupec (typicky GETAC/ACTIA — mají jiné, zařízení-specifické
+        # kroky — nebo "Ostatní - doplnit"), se promítne jen do TOTALu.
         for faze_key, _label, start_col in EXPORT_BLOKY:
             faze = item["faze"][faze_key]
             kroky = faze.get("kroky", [])
-            steps_defs = KROKY_DEFS_BY_FAZE[faze_key]
+            export_steps = EXPORT_KROKY_BY_FAZE[faze_key]
             start_idx = column_index_from_string(start_col)
-            for i in range(len(steps_defs)):
-                minuty = kroky[i]["minuty"] if i < len(kroky) else 0
-                hodiny = round((minuty or 0) / 60, 2)
+            col_hodiny = [0.0] * len(export_steps)
+            for krok in kroky:
+                idx = _match_export_col_idx(faze_key, krok.get("nazev", ""), export_steps)
+                if idx is not None:
+                    col_hodiny[idx] += (krok.get("minuty") or 0) / 60
+            for i, hodiny in enumerate(col_hodiny):
                 if hodiny:
-                    c = ws.cell(row=row, column=start_idx + i, value=hodiny)
+                    c = ws.cell(row=row, column=start_idx + i, value=round(hodiny, 2))
                     c.number_format = "0.0#"
                     c.font = NORMAL
-                celkem_hodin += hodiny
-            if len(kroky) > len(steps_defs):  # volný "doplnit" krok — jen do součtu
-                celkem_hodin += round((kroky[-1]["minuty"] or 0) / 60, 2)
-        ostatni = item["faze"].get("ostatni")
-        if ostatni:
-            celkem_hodin += round(faze_total_minutes(ostatni) / 60, 2)
 
-        tcell = ws.cell(row=row, column=total_col_idx, value=round(celkem_hodin, 2))
+        celkem_hodin = minutes_to_hours(reklamace_total_minutes(item))
+        tcell = ws.cell(row=row, column=total_col_idx, value=celkem_hodin)
         tcell.font = BOLD
         tcell.number_format = "0.0#"
         row += 1
