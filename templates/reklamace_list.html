@@ -272,19 +272,20 @@ function renderStats(rows) {
   const naklady = rows.reduce((s, r) => s + (r.naklady_celkem || 0), 0);
   const faktura = rows.reduce((s, r) => s + (r.faktura_celkem || 0), 0);
   const neuhrazeno = rows.reduce((s, r) => s + (r.faktura_neuhrazeno || 0), 0);
+  const cerpaniHodin = rows.filter(r => r.stav === "vyřízeno").reduce((s, r) => s + (r.celkem_hodin || 0), 0);
   document.getElementById("stats").innerHTML = `
     <div class="stat-box"><div class="sv">${rows.length}</div><div class="sl">Celkem reklamací</div></div>
     <div class="stat-box"><div class="sv">${otevrene}</div><div class="sl">Otevřené / probíhající</div></div>
     <div class="stat-box"><div class="sv">${uzavrene.length}</div><div class="sl">Uzavřené (${fakturovano} fakturováno)</div></div>
     <div class="stat-box"><div class="sv">${celkemHodin.toFixed(1)} h</div><div class="sl">Odpracováno celkem</div></div>
+    <div class="stat-box"><div class="sv" style="${cerpaniHodin > 0 ? 'color:#8e44ad' : ''}">${cerpaniHodin.toFixed(1)} h</div><div class="sl">Čerpání hodin (uzavřeno, čeká na fakturaci)</div></div>
     <div class="stat-box"><div class="sv">${prumerDnu != null ? prumerDnu.toFixed(1) : "—"}</div><div class="sl">Průměr prac. dnů / uzavřenou reklamaci</div></div>
     <div class="stat-box"><div class="sv">${fmtKc(naklady)}</div><div class="sl">Náklady ForTool celkem</div></div>
     <div class="stat-box"><div class="sv">${fmtKc(faktura)}</div><div class="sl">Vydaná faktura celkem bez DPH</div></div>
     <div class="stat-box"><div class="sv" style="${neuhrazeno > 0 ? 'color:#e67e22' : ''}">${fmtKc(neuhrazeno)}</div><div class="sl">Čeká na úhradu</div></div>`;
 
-  const nevyfakturovanoHodin = rows.filter(r => r.stav === "vyřízeno").reduce((s, r) => s + (r.celkem_hodin || 0), 0);
-  document.getElementById("nevyfakturovanoHodin").textContent = `${nevyfakturovanoHodin.toFixed(1)} h`;
-  updateZustatekPreview(nevyfakturovanoHodin);
+  document.getElementById("nevyfakturovanoHodin").textContent = `${cerpaniHodin.toFixed(1)} h`;
+  updateZustatekPreview(cerpaniHodin);
 }
 
 function render(rows) {
