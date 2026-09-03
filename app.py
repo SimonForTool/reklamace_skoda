@@ -155,7 +155,7 @@ def api_reklamace_export():
     if brand not in reklamace_data.BRANDS:
         return jsonify({"status": "error", "message": "Neznámá značka."}), 400
     from datetime import date
-    filename = f"reklamace_{brand}_{date.today().strftime('%m_%Y')}.xlsx"
+    filename = f"VAT_Vykaz_hodin_{brand}_{date.today().strftime('%m.%Y')}.xlsx"
     out_path = OUTPUT_DIR / filename
     reklamace_data.export_xlsx(brand, out_path)
     return send_file(out_path, as_attachment=True, download_name=filename)
