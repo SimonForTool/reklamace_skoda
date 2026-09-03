@@ -188,12 +188,23 @@ def reklamace_uhrada_stav(item: dict) -> str:
     return "Čeká na úhradu"
 
 
+def faze_display_label(item: dict, key: str) -> str:
+    """Název fáze pro zobrazení — u "Ostatní dodavatel" použije rovnou
+    vyplněné jméno dodavatele (je-li k dispozici) pro snadnější
+    identifikaci, jinak obecný název fáze."""
+    if key == "ostatni":
+        dodavatel = (item["faze"]["ostatni"].get("dodavatel") or "").strip()
+        if dodavatel:
+            return dodavatel
+    return FAZE_LABEL_BY_KEY[key]
+
+
 def reklamace_poznamky_souhrn(item: dict) -> str:
     casti = []
     for k in FAZE_KEYS:
         text = (item["faze"][k].get("poznamky_faktura") or "").strip()
         if text:
-            casti.append(f"{FAZE_LABEL_BY_KEY[k]}: {text}")
+            casti.append(f"{faze_display_label(item, k)}: {text}")
     return " | ".join(casti)
 
 
@@ -222,11 +233,11 @@ def _sync_uzavreno(item: dict):
 
 
 def aktualni_faze_label(item: dict) -> str:
-    probihajici = [FAZE_LABEL_BY_KEY[k] for k in FAZE_KEYS if item["faze"][k]["stav"] == "probíhá"]
+    probihajici = [faze_display_label(item, k) for k in FAZE_KEYS if item["faze"][k]["stav"] == "probíhá"]
     if probihajici:
         return ", ".join(probihajici)
-    if overall_status(item) == "vyřízeno":
-        return "—"
+    if overall_status(item) in ("vyřízeno", "fakturováno"):
+        return "Ukončeno"
     return "Nezahájeno"
 
 

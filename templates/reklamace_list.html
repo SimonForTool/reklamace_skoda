@@ -388,7 +388,7 @@ function render(rows) {
     ${sortTh("stav", "Stav")}
     <th>Doba trvání (prac. dny)</th>
     <th>Aktuální fáze</th><th>Odpovědná osoba</th><th>Celkem hodin</th>
-    <th>Náklady ForTool</th><th>Faktura bez DPH</th><th>Úhrada</th><th>Poznámky</th>
+    <th>Náklady ForTool</th><th>Faktura vydaná (bez DPH)</th><th>Úhrada</th><th>Poznámky</th>
   </tr></thead><tbody>`;
   for (const r of sortedRows(rows)) {
     const inits = initials(r.odpovedna_osoba);
