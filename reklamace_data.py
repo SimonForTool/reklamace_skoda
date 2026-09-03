@@ -240,6 +240,11 @@ def list_all(brand: str | None = None) -> list:
 
 
 def overall_status(item: dict) -> str:
+    # Ruční datum ukončení reklamace (na detailu) rozhoduje přednostně —
+    # ne každá reklamace prochází všemi 4 fázemi, takže čekat na "hotovo"
+    # u všech čtyř by u řady reklamací nikdy nenastalo.
+    if item.get("uzavreno"):
+        return "vyřízeno"
     stavy = [item["faze"][k]["stav"] for k in FAZE_KEYS]
     if all(s == "hotovo" for s in stavy):
         return "vyřízeno"
