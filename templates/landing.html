@@ -17,13 +17,13 @@
   .cards { display: flex; gap: 24px; flex-wrap: wrap; justify-content: center; }
   .card {
     display: flex; flex-direction: column; align-items: center; justify-content: center;
-    width: 220px; height: 160px; border-radius: 14px; background: #fff;
+    width: 240px; height: 170px; border-radius: 14px; background: #fff;
     box-shadow: 0 2px 10px rgba(0,0,0,.12); text-decoration: none; color: var(--blue);
-    font-size: 20px; font-weight: 800; letter-spacing: .5px;
     border: 2px solid transparent; transition: transform .12s, box-shadow .12s, border-color .12s;
+    padding: 20px;
   }
   .card:hover { transform: translateY(-3px); box-shadow: 0 6px 18px rgba(0,0,0,.18); border-color: #2E75B6; }
-  .card .emoji { font-size: 40px; margin-bottom: 10px; }
+  .card img { max-width: 100%; max-height: 110px; object-fit: contain; }
 </style>
 </head>
 <body>
@@ -31,8 +31,7 @@
   <div class="cards">
     {% for key, b in brands.items() %}
     <a class="card" href="/{{ key }}">
-      <span class="emoji">🚗</span>
-      {{ b.label }}
+      <img src="{{ url_for('static', filename='logos/' + b.logo) }}" alt="{{ b.label }}">
     </a>
     {% endfor %}
   </div>

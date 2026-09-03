@@ -20,8 +20,8 @@ DATA_PATH = DATA_DIR / "reklamace.json"
 UPLOAD_DIR = Path("uploads") / "reklamace"
 
 BRANDS = {
-    "skoda":   {"label": "ŠKODA",   "prefix": "SKO"},
-    "porsche": {"label": "PORSCHE", "prefix": "POR"},
+    "skoda":   {"label": "ŠKODA",   "prefix": "SKO", "logo": "skoda.webp"},
+    "porsche": {"label": "PORSCHE", "prefix": "POR", "logo": "porsche.png"},
 }
 DEFAULT_BRAND = "skoda"
 
