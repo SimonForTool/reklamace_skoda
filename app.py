@@ -160,6 +160,29 @@ def api_reklamace_export():
     reklamace_data.export_xlsx(brand, out_path)
     return send_file(out_path, as_attachment=True, download_name=filename)
 
+@app.get("/api/nastaveni")
+def api_nastaveni_get():
+    brand = request.args.get("znacka")
+    if brand not in reklamace_data.BRANDS:
+        return jsonify({"status": "error", "message": "Neznámá značka."}), 400
+    return jsonify(reklamace_data.get_nastaveni(brand))
+
+@app.post("/api/nastaveni")
+def api_nastaveni_update():
+    body = request.get_json(force=True)
+    brand = body.get("znacka")
+    if brand not in reklamace_data.BRANDS:
+        return jsonify({"status": "error", "message": "Neznámá značka."}), 400
+    return jsonify(reklamace_data.update_nastaveni(brand, body))
+
+@app.post("/api/reklamace/potvrdit-fakturaci")
+def api_potvrdit_fakturaci():
+    body = request.get_json(force=True)
+    brand = body.get("znacka")
+    if brand not in reklamace_data.BRANDS:
+        return jsonify({"status": "error", "message": "Neznámá značka."}), 400
+    return jsonify(reklamace_data.potvrdit_fakturaci(brand))
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)

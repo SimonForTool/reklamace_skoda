@@ -55,59 +55,70 @@ KROK_KATALOG = [
 KROK_KATALOG_BY_NAZEV = {k["nazev"]: k for k in KROK_KATALOG}
 EXTRA_KROK_MINUTY_DEFAULT = 15
 
-STAV_LABELS_HISTORIE = {"nová": "Otevřeno", "probíhá": "Probíhá", "vyřízeno": "Uzavřeno"}
+STAV_LABELS_HISTORIE = {
+    "nová": "Otevřeno", "probíhá": "Probíhá", "vyřízeno": "Uzavřeno", "fakturováno": "Fakturováno",
+}
 
-# Sloupce reálné exportní šablony "VAT Výkaz hodin" (předávací protokol pro
-# fakturaci) — jen WETSy/GETAC/ACTIA mají v šabloně vlastní blok sloupců;
-# Ostatní dodavatel se promítá jen do celkového součtu (TOTAL), nemá
-# dedikovaný blok. Appka teď nabízí jeden společný katalog kroků na všech
-# záložkách, takže se název kroku ne vždy doslova shoduje s názvem sloupce
-# v šabloně (u WETSy jsou 2 běžné synonyma, viz WETSY_EXPORT_SYNONYMS) —
-# nespárované kroky se do rozpisu sloupců nezapočítají, ale do TOTALu ano.
-EXPORT_KROKY_BY_FAZE = {
-    "wetsy": [
-        {"nazev": "Telefonický příjem reklamace"},
-        {"nazev": "Odchozí informační e-mail"},
-        {"nazev": "Příchozí e-mail, založení složky"},
-        {"nazev": "Založení ticket WETSy"},
-        {"nazev": "Komunikace VAT & ŠPC (č. fa z VW)"},
-        {"nazev": "Komunikace se zák. (e-mail, tel.)"},
-        {"nazev": "Správa ticketu WETSY"},
-    ],
-    "getac": [
-        {"nazev": "Založení ticketu GETAC"},
-        {"nazev": "Komunikace s GETAC"},
-        {"nazev": "Komunikace se zákazníkem"},
-        {"nazev": "Odeslání zařízení (servis, výměna)"},
-        {"nazev": "Správa ticketu GETAC"},
-        {"nazev": "Příjem reklamovaného zař."},
-        {"nazev": "Zpětná vazba u zákazníka"},
-        {"nazev": "Uzavření ticketu"},
-        {"nazev": "Dokument potvrzení"},
-    ],
-    "actia": [
-        {"nazev": "Založení ticketu ACTIA"},
-        {"nazev": "Komunikace s ACTIA"},
-        {"nazev": "Komunikace se zákazníkem"},
-        {"nazev": "Odeslání zařízení (servis, výměna)"},
-        {"nazev": "Správa ticketu ACTIA"},
-        {"nazev": "Příjem reklamovaného zař."},
-        {"nazev": "Zpětná vazba u zákazníka"},
-        {"nazev": "Uzavření ticketu"},
-        {"nazev": "Dokument potvrzení"},
-    ],
-}
-WETSY_EXPORT_SYNONYMS = {
-    "Založení ticket": "Založení ticket WETSy",
-    "Správa ticketu": "Správa ticketu WETSY",
-}
-EXPORT_BLOKY = [
-    ("wetsy", "WETSy", "E"),
-    ("getac", "GETAC", "L"),
-    ("actia", "ACTIA IME", "U"),
+# Export VAT do Excelu (podklad pro fakturaci) — jeden řádek na uzavřenou
+# reklamaci, souhrnné hodiny za každého dodavatele (bez rozpisu kroků).
+EXPORT_FAZE_SLOUPCE = [
+    ("wetsy",   "WETSy (hod.)"),
+    ("getac",   "GETAC (hod.)"),
+    ("actia",   "ACTIA IME (hod.)"),
+    ("ostatni", "Ostatní dodavatel (hod.)"),
 ]
 
+NASTAVENI_DEFAULTS = {
+    "skoda":   {"sazba": 1350, "prevod_hodin": 431},
+    "porsche": {"sazba": 1350, "prevod_hodin": 0},
+}
+
 DOPRAVCI = ["Česká pošta", "DHL", "Geis", "PPL", "GLS", "Zásilkovna", "DPD", "Toptrans", "Jiný"]
+
+
+def get_nastaveni(brand: str) -> dict:
+    data = load_all()
+    ulozene = data.get("nastaveni", {}).get(brand, {})
+    default = NASTAVENI_DEFAULTS.get(brand, {"sazba": 0, "prevod_hodin": 0})
+    return {**default, **ulozene}
+
+
+def update_nastaveni(brand: str, patch: dict) -> dict:
+    data = load_all()
+    nastaveni = data.setdefault("nastaveni", {}).setdefault(brand, dict(get_nastaveni(brand)))
+    for key in ("sazba", "prevod_hodin"):
+        if key in patch:
+            try:
+                nastaveni[key] = float(patch[key])
+            except (TypeError, ValueError):
+                pass
+    save_all(data)
+    return nastaveni
+
+
+def potvrdit_fakturaci(brand: str) -> dict:
+    """Označí všechny aktuálně uzavřené (a dosud nefakturované) reklamace
+    dané značky jako Fakturováno a odečte jejich odpracované hodiny
+    z rozpočtu PŘEVOD hodin — zůstatek se stává počátkem pro příště."""
+    data = load_all()
+    items = [i for i in data.get("items", {}).values()
+             if i.get("znacka", DEFAULT_BRAND) == brand and overall_status(i) == "vyřízeno"]
+    total_minutes = sum(reklamace_total_minutes(i) for i in items)
+    total_hodin = round(total_minutes / 60, 2)
+
+    for i in items:
+        i["fakturovano"] = True
+
+    nastaveni = data.setdefault("nastaveni", {}).setdefault(brand, dict(get_nastaveni(brand)))
+    novy_zustatek = round(nastaveni.get("prevod_hodin", 0) - total_hodin, 2)
+    nastaveni["prevod_hodin"] = novy_zustatek
+    save_all(data)
+
+    return {
+        "pocet_reklamaci": len(items),
+        "celkem_hodin": total_hodin,
+        "novy_zustatek": novy_zustatek,
+    }
 
 
 def _empty_kroky() -> list:
@@ -240,9 +251,14 @@ def list_all(brand: str | None = None) -> list:
 
 
 def overall_status(item: dict) -> str:
-    # Ruční datum ukončení reklamace (na detailu) rozhoduje přednostně —
-    # ne každá reklamace prochází všemi 4 fázemi, takže čekat na "hotovo"
-    # u všech čtyř by u řady reklamací nikdy nenastalo.
+    # Fakturováno = uzavřená reklamace už zahrnutá do potvrzené fakturace
+    # (viz potvrdit_fakturaci) — trvalý koncový stav, dokud se ručně
+    # nezruší. Ruční datum ukončení reklamace (na detailu) rozhoduje
+    # přednostně před fázemi — ne každá reklamace prochází všemi 4
+    # fázemi, takže čekat na "hotovo" u všech čtyř by u řady reklamací
+    # nikdy nenastalo.
+    if item.get("fakturovano"):
+        return "fakturováno"
     if item.get("uzavreno"):
         return "vyřízeno"
     stavy = [item["faze"][k]["stav"] for k in FAZE_KEYS]
@@ -285,6 +301,7 @@ def new_reklamace(brand: str, servisni_partner: str, kontaktni_osoba: str, datum
         "kontaktni_osoba": kontaktni_osoba.strip(),
         "datum_prijeti": datum_prijeti,
         "uzavreno": None,
+        "fakturovano": False,
         "odpovedna_osoba": "",
         "vytvoreno": datetime.now().isoformat(timespec="seconds"),
         "faze": {k: _empty_faze(k) for k in FAZE_KEYS},
@@ -476,31 +493,21 @@ def history_all(brand: str | None = None) -> list:
     return [history_row(i) for i in list_all(brand)]
 
 
-def _match_export_col_idx(faze_key: str, nazev: str, export_steps: list) -> int | None:
-    candidates = {nazev}
-    if faze_key == "wetsy" and nazev in WETSY_EXPORT_SYNONYMS:
-        candidates.add(WETSY_EXPORT_SYNONYMS[nazev])
-    for i, step in enumerate(export_steps):
-        if step["nazev"] in candidates:
-            return i
-    return None
-
-
 def export_xlsx(brand: str, out_path: Path) -> Path:
-    """Export do Excelu ve formátu předávacího protokolu pro fakturaci
-    (podle vzoru "VAT Výkaz hodin"): jeden řádek na reklamaci, sloupcové
-    bloky WETSy/GETAC/ACTIA IME s jednotlivými kroky v hodinách, TOTAL
-    a souhrnné řádky Průměr/TOTAL/PŘEVOD/SAZBA/K FAKTURACI bez DPH."""
+    """Export VAT do Excelu — podklad pro fakturaci. Jeden řádek na
+    UZAVŘENOU reklamaci se souhrnnými hodinami za každého dodavatele
+    (bez rozpisu jednotlivých kroků), a souhrnné řádky Průměr/TOTAL/
+    PŘEVOD hodin do dalšího měsíce/SAZBA/K FAKTURACI bez DPH."""
     from openpyxl import Workbook
     from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
-    from openpyxl.utils import column_index_from_string, get_column_letter
+    from openpyxl.utils import get_column_letter
 
-    items = list_all(brand)
+    items = [i for i in list_all(brand) if i["celkovy_stav"] == "vyřízeno"]
+    items.sort(key=lambda i: i.get("datum_prijeti") or "")
+    nastaveni = get_nastaveni(brand)
 
     HEAD_FILL = PatternFill("solid", fgColor="1F4E79")
     HEAD_FONT = Font(name="Arial", size=10, bold=True, color="FFFFFF")
-    SUB_FILL = PatternFill("solid", fgColor="BDD7EE")
-    SUB_FONT = Font(name="Arial", size=8.5, bold=True, color="1F4E79")
     THIN = Side(style="thin", color="B7B7B7")
     BORDER = Border(left=THIN, right=THIN, top=THIN, bottom=THIN)
     BOLD = Font(name="Arial", size=10, bold=True)
@@ -512,107 +519,64 @@ def export_xlsx(brand: str, out_path: Path) -> Path:
     ws.title = date.today().strftime("%m.%Y")
     ws.sheet_view.showGridLines = False
 
-    for col in ("A", "B", "C", "D"):
-        ws[f"{col}1"].font = HEAD_FONT
-        ws[f"{col}1"].fill = HEAD_FILL
-        ws[f"{col}1"].alignment = CENTER_WRAP
-        ws.merge_cells(f"{col}1:{col}2")
-    ws["A1"] = "ZÁKAZNÍK"
-    ws["B1"] = "DATUM PŘÍJMU"
-    ws["C1"] = "DATUM VYŘÍZENÍ"
-    ws["D1"] = "POČET PRAC. DNŮ"
-
-    total_col_idx = 4
-    for faze_key, label, start_col in EXPORT_BLOKY:
-        steps = EXPORT_KROKY_BY_FAZE[faze_key]
-        start_idx = column_index_from_string(start_col)
-        end_idx = start_idx + len(steps) - 1
-        end_col = get_column_letter(end_idx)
-        ws.merge_cells(f"{start_col}1:{end_col}1")
-        cell = ws[f"{start_col}1"]
-        cell.value = label
-        cell.font = HEAD_FONT
-        cell.fill = HEAD_FILL
-        cell.alignment = CENTER_WRAP
-        for i, step in enumerate(steps):
-            c = ws.cell(row=2, column=start_idx + i, value=step["nazev"])
-            c.font = SUB_FONT
-            c.fill = SUB_FILL
-            c.alignment = CENTER_WRAP
-            c.border = BORDER
-            ws.column_dimensions[get_column_letter(start_idx + i)].width = 11
-        total_col_idx = max(total_col_idx, end_idx)
-
-    total_col_idx += 1
+    headers = ["Číslo", "Servisní partner", "Kontaktní osoba", "Datum přijetí",
+               "Datum ukončení", "Stav", "Doba trvání (prac. dny)"]
+    headers += [label for _key, label in EXPORT_FAZE_SLOUPCE]
+    headers.append("TOTAL (hod.)")
+    total_col_idx = len(headers)
     total_col = get_column_letter(total_col_idx)
-    ws[f"{total_col}1"] = "TOTAL (hod.)"
-    ws[f"{total_col}1"].font = HEAD_FONT
-    ws[f"{total_col}1"].fill = HEAD_FILL
-    ws[f"{total_col}1"].alignment = CENTER_WRAP
-    ws.merge_cells(f"{total_col}1:{total_col}2")
 
-    ws.column_dimensions["A"].width = 32
-    ws.column_dimensions["B"].width = 13
-    ws.column_dimensions["C"].width = 13
-    ws.column_dimensions["D"].width = 13
-    ws.column_dimensions[total_col].width = 12
+    for ci, h in enumerate(headers, start=1):
+        c = ws.cell(row=1, column=ci, value=h)
+        c.font = HEAD_FONT
+        c.fill = HEAD_FILL
+        c.alignment = CENTER_WRAP
+        c.border = BORDER
 
-    row = first_data_row = 3
+    widths = [12, 28, 20, 13, 13, 12, 13] + [15] * len(EXPORT_FAZE_SLOUPCE) + [12]
+    for ci, w in enumerate(widths, start=1):
+        ws.column_dimensions[get_column_letter(ci)].width = w
+
+    row = first_data_row = 2
     for item in items:
-        zakaznik = item["servisni_partner"]
-        if item.get("kontaktni_osoba"):
-            zakaznik = f"{item['kontaktni_osoba']}, {item['servisni_partner']}"
         datum_prijeti = item.get("datum_prijeti")
         uzavreno = item.get("uzavreno")
         start = date.fromisoformat(datum_prijeti) if datum_prijeti else None
         end = date.fromisoformat(uzavreno) if uzavreno else date.today()
         doba = business_days_between(start, end) if start else None
 
-        ws.cell(row=row, column=1, value=zakaznik).font = NORMAL
-        c2 = ws.cell(row=row, column=2, value=start)
-        c2.font = NORMAL
-        c2.number_format = "DD.MM.YYYY"
-        c3 = ws.cell(row=row, column=3, value=date.fromisoformat(uzavreno) if uzavreno else None)
-        c3.font = NORMAL
-        c3.number_format = "DD.MM.YYYY"
-        ws.cell(row=row, column=4, value=doba).font = NORMAL
+        vals = [item["cislo"], item["servisni_partner"], item.get("kontaktni_osoba", ""),
+                start, date.fromisoformat(uzavreno) if uzavreno else None,
+                STAV_LABELS_HISTORIE.get(item["celkovy_stav"], item["celkovy_stav"]), doba]
+        for ci, v in enumerate(vals, start=1):
+            c = ws.cell(row=row, column=ci, value=v)
+            c.font = NORMAL
+            c.border = BORDER
+            if ci in (4, 5):
+                c.number_format = "DD.MM.YYYY"
 
-        # Kroky se teď přidávají volně (společný katalog na všech záložkách),
-        # takže se do sloupců šablony párují podle NÁZVU (ne pozice) — víc
-        # kroků se stejným názvem se ve sloupci sečte. Co nenajde párový
-        # sloupec (typicky GETAC/ACTIA — mají jiné, zařízení-specifické
-        # kroky — nebo "Ostatní - doplnit"), se promítne jen do TOTALu.
-        for faze_key, _label, start_col in EXPORT_BLOKY:
-            faze = item["faze"][faze_key]
-            kroky = faze.get("kroky", [])
-            export_steps = EXPORT_KROKY_BY_FAZE[faze_key]
-            start_idx = column_index_from_string(start_col)
-            col_hodiny = [0.0] * len(export_steps)
-            for krok in kroky:
-                idx = _match_export_col_idx(faze_key, krok.get("nazev", ""), export_steps)
-                if idx is not None:
-                    col_hodiny[idx] += (krok.get("minuty") or 0) / 60
-            for i, hodiny in enumerate(col_hodiny):
-                if hodiny:
-                    c = ws.cell(row=row, column=start_idx + i, value=round(hodiny, 2))
-                    c.number_format = "0.0#"
-                    c.font = NORMAL
+        faze_ci = 8
+        for faze_key, _label in EXPORT_FAZE_SLOUPCE:
+            hodiny = minutes_to_hours(faze_total_minutes(item["faze"][faze_key]))
+            c = ws.cell(row=row, column=faze_ci, value=hodiny)
+            c.font = NORMAL
+            c.number_format = "0.0#"
+            c.border = BORDER
+            faze_ci += 1
 
         celkem_hodin = minutes_to_hours(reklamace_total_minutes(item))
         tcell = ws.cell(row=row, column=total_col_idx, value=celkem_hodin)
         tcell.font = BOLD
         tcell.number_format = "0.0#"
+        tcell.border = BORDER
         row += 1
 
     last_data_row = row - 1
-    for r in range(first_data_row, row):
-        for c in range(1, total_col_idx + 1):
-            ws.cell(row=r, column=c).border = BORDER
 
     row += 1
-    ws.cell(row=row, column=1, value="Průměr").font = BOLD
+    ws.cell(row=row, column=1, value="Průměr prac. dnů / uzavřenou reklamaci").font = BOLD
     if last_data_row >= first_data_row:
-        avg_cell = ws.cell(row=row, column=4, value=f"=AVERAGE(D{first_data_row}:D{last_data_row})")
+        avg_cell = ws.cell(row=row, column=7, value=f"=AVERAGE(G{first_data_row}:G{last_data_row})")
         avg_cell.font = BOLD
         avg_cell.number_format = "0.0#"
     row += 1
@@ -624,10 +588,21 @@ def export_xlsx(brand: str, out_path: Path) -> Path:
         sum_cell.font = BOLD
         sum_cell.number_format = "0.0#"
     row += 1
-    ws.cell(row=row, column=1, value="PŘEVOD hodin do dalšího měsíce").font = NORMAL
+    prevod_row = row
+    ws.cell(row=row, column=1, value="PŘEVOD hodin do dalšího měsíce (počáteční rozpočet)").font = NORMAL
+    pc = ws.cell(row=row, column=total_col_idx, value=nastaveni["prevod_hodin"])
+    pc.number_format = "0.0#"
+    row += 1
+    ws.cell(row=row, column=1, value="ZŮSTATEK (po odečtení této fakturace)").font = BOLD
+    if last_data_row >= first_data_row:
+        zc = ws.cell(row=row, column=total_col_idx, value=f"={total_col}{prevod_row}-{total_col}{total_row}")
+        zc.font = BOLD
+        zc.number_format = "0.0#"
     row += 1
     sazba_row = row
     ws.cell(row=row, column=1, value="SAZBA").font = NORMAL
+    sc = ws.cell(row=row, column=total_col_idx, value=nastaveni["sazba"])
+    sc.number_format = "#,##0"
     row += 1
     ws.cell(row=row, column=1, value="K FAKTURACI bez DPH").font = BOLD
     fakt_cell = ws.cell(row=row, column=total_col_idx, value=f"={total_col}{total_row}*{total_col}{sazba_row}")

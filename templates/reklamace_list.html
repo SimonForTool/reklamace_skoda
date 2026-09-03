@@ -85,9 +85,14 @@
     display: inline-block; padding: 3px 10px; border-radius: 12px;
     font-size: 11px; font-weight: 700; color: #fff;
   }
-  .badge.nova     { background: #7f8c9a; }
-  .badge.probiha  { background: var(--orange); }
-  .badge.vyrizeno { background: var(--green); }
+  .badge.nova        { background: #7f8c9a; }
+  .badge.probiha     { background: var(--orange); }
+  .badge.vyrizeno    { background: var(--green); }
+  .badge.fakturovano { background: var(--blue2); }
+
+  .btn-confirm { background: #8e44ad; color: #fff; }
+  .settings-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; align-items: end; }
+  .settings-grid .readonly-val { font-size: 18px; font-weight: 800; color: var(--blue); padding: 7px 0; }
 
   .empty { padding: 30px; text-align: center; color: #888; }
 
@@ -108,10 +113,35 @@
   <a class="home" href="/">← Výběr značky</a>
   <div class="spacer"></div>
   <button class="btn btn-export" onclick="exportXlsx()">📊 Export VAT do Excelu</button>
+  <button class="btn btn-confirm" onclick="potvrditFakturaci()">✅ Potvrdit fakturaci</button>
   <button class="btn btn-new" id="toggleNewBtn" onclick="toggleNewForm()">➕ Nová reklamace</button>
 </header>
 
 <main>
+
+  <div class="card">
+    <div class="card-header">💰 Nastavení fakturace</div>
+    <div class="card-body">
+      <div class="settings-grid">
+        <div class="field">
+          <label>Sazba [Kč/hod]</label>
+          <input id="nastaveniSazba" type="number" min="0" step="1" onchange="changeNastaveni('sazba', this.value)">
+        </div>
+        <div class="field">
+          <label>Převod hodin (počáteční rozpočet)</label>
+          <input id="nastaveniPrevod" type="number" step="0.1" onchange="changeNastaveni('prevod_hodin', this.value)">
+        </div>
+        <div class="field">
+          <label>Nevyfakturováno (hodiny čekající na potvrzení)</label>
+          <div class="readonly-val" id="nevyfakturovanoHodin">0 h</div>
+        </div>
+        <div class="field">
+          <label>Zůstatek po potvrzení fakturace</label>
+          <div class="readonly-val" id="zustatekPreview">0 h</div>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <div class="card" id="newForm">
     <div class="card-header">➕ Nová reklamace</div>
@@ -153,7 +183,56 @@
 
 <script>
 const BRAND = {{ brand | tojson }};
-const STAV_CLASS = { "nová": "nova", "probíhá": "probiha", "vyřízeno": "vyrizeno" };
+const STAV_CLASS = { "nová": "nova", "probíhá": "probiha", "vyřízeno": "vyrizeno", "fakturováno": "fakturovano" };
+let NASTAVENI = { sazba: 0, prevod_hodin: 0 };
+
+async function loadNastaveni() {
+  const resp = await fetch(`/api/nastaveni?znacka=${BRAND}`);
+  NASTAVENI = await resp.json();
+  document.getElementById("nastaveniSazba").value = NASTAVENI.sazba;
+  document.getElementById("nastaveniPrevod").value = NASTAVENI.prevod_hodin;
+}
+
+async function changeNastaveni(field, value) {
+  const resp = await fetch("/api/nastaveni", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ znacka: BRAND, [field]: value }),
+  });
+  NASTAVENI = await resp.json();
+  const nevyfakturovanoHodin = parseFloat(document.getElementById("nevyfakturovanoHodin").textContent) || 0;
+  updateZustatekPreview(nevyfakturovanoHodin);
+  showToast("Nastavení uloženo.");
+}
+
+function updateZustatekPreview(nevyfakturovanoHodin) {
+  const zustatek = (NASTAVENI.prevod_hodin || 0) - nevyfakturovanoHodin;
+  const el = document.getElementById("zustatekPreview");
+  el.textContent = `${zustatek.toFixed(1)} h`;
+  el.style.color = zustatek < 0 ? "#e74c3c" : "";
+}
+
+async function potvrditFakturaci() {
+  if (!confirm(
+    "Potvrdit fakturaci označí VŠECHNY aktuálně uzavřené (nefakturované) reklamace jako Fakturováno " +
+    "a odečte jejich odpracované hodiny z převodu hodin (rozpočtu) pro příští fakturaci.\n\n" +
+    "Proveďte to až PO stažení a odeslání exportu VAT do Excelu. Pokračovat?"
+  )) return;
+  try {
+    const resp = await fetch("/api/reklamace/potvrdit-fakturaci", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ znacka: BRAND }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.message || "Chyba při potvrzování fakturace.");
+    showToast(`Fakturováno ${data.pocet_reklamaci} reklamací (${data.celkem_hodin} h). Nový zůstatek: ${data.novy_zustatek} h.`);
+    await loadNastaveni();
+    await loadList();
+  } catch (e) {
+    showToast(e.message, true);
+  }
+}
 
 function fmtDate(iso) {
   if (!iso) return "—";
@@ -182,8 +261,9 @@ function fmtKc(n) {
 }
 
 function renderStats(rows) {
-  const otevrene = rows.filter(r => r.stav !== "vyřízeno").length;
-  const uzavrene = rows.filter(r => r.stav === "vyřízeno");
+  const otevrene = rows.filter(r => r.stav === "nová" || r.stav === "probíhá").length;
+  const uzavrene = rows.filter(r => r.stav === "vyřízeno" || r.stav === "fakturováno");
+  const fakturovano = rows.filter(r => r.stav === "fakturováno").length;
   const celkemHodin = rows.reduce((s, r) => s + (r.celkem_hodin || 0), 0);
   const dobaUzavrenych = uzavrene.filter(r => r.doba_pracovnich_dni != null);
   const prumerDnu = dobaUzavrenych.length
@@ -195,12 +275,16 @@ function renderStats(rows) {
   document.getElementById("stats").innerHTML = `
     <div class="stat-box"><div class="sv">${rows.length}</div><div class="sl">Celkem reklamací</div></div>
     <div class="stat-box"><div class="sv">${otevrene}</div><div class="sl">Otevřené / probíhající</div></div>
-    <div class="stat-box"><div class="sv">${uzavrene.length}</div><div class="sl">Uzavřené</div></div>
+    <div class="stat-box"><div class="sv">${uzavrene.length}</div><div class="sl">Uzavřené (${fakturovano} fakturováno)</div></div>
     <div class="stat-box"><div class="sv">${celkemHodin.toFixed(1)} h</div><div class="sl">Odpracováno celkem</div></div>
     <div class="stat-box"><div class="sv">${prumerDnu != null ? prumerDnu.toFixed(1) : "—"}</div><div class="sl">Průměr prac. dnů / uzavřenou reklamaci</div></div>
     <div class="stat-box"><div class="sv">${fmtKc(naklady)}</div><div class="sl">Náklady ForTool celkem</div></div>
     <div class="stat-box"><div class="sv">${fmtKc(faktura)}</div><div class="sl">Vydaná faktura celkem bez DPH</div></div>
     <div class="stat-box"><div class="sv" style="${neuhrazeno > 0 ? 'color:#e67e22' : ''}">${fmtKc(neuhrazeno)}</div><div class="sl">Čeká na úhradu</div></div>`;
+
+  const nevyfakturovanoHodin = rows.filter(r => r.stav === "vyřízeno").reduce((s, r) => s + (r.celkem_hodin || 0), 0);
+  document.getElementById("nevyfakturovanoHodin").textContent = `${nevyfakturovanoHodin.toFixed(1)} h`;
+  updateZustatekPreview(nevyfakturovanoHodin);
 }
 
 function render(rows) {
@@ -298,7 +382,7 @@ function showToast(msg, isError = false) {
   setTimeout(() => { t.className = "toast"; }, 3000);
 }
 
-loadList();
+loadNastaveni().then(loadList);
 </script>
 </body>
 </html>
