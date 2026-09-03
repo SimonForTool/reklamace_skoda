@@ -124,10 +124,6 @@
     <div class="card-body">
       <div class="settings-grid">
         <div class="field">
-          <label>Sazba [Kč/hod]</label>
-          <input id="nastaveniSazba" type="number" min="0" step="1" onchange="changeNastaveni('sazba', this.value)">
-        </div>
-        <div class="field">
           <label>Převod hodin (počáteční rozpočet)</label>
           <input id="nastaveniPrevod" type="number" step="0.1" onchange="changeNastaveni('prevod_hodin', this.value)">
         </div>
@@ -184,12 +180,11 @@
 <script>
 const BRAND = {{ brand | tojson }};
 const STAV_CLASS = { "nová": "nova", "probíhá": "probiha", "vyřízeno": "vyrizeno", "fakturováno": "fakturovano" };
-let NASTAVENI = { sazba: 0, prevod_hodin: 0 };
+let NASTAVENI = { prevod_hodin: 0 };
 
 async function loadNastaveni() {
   const resp = await fetch(`/api/nastaveni?znacka=${BRAND}`);
   NASTAVENI = await resp.json();
-  document.getElementById("nastaveniSazba").value = NASTAVENI.sazba;
   document.getElementById("nastaveniPrevod").value = NASTAVENI.prevod_hodin;
 }
 

@@ -50,6 +50,9 @@ KROK_KATALOG = [
     {"nazev": "Odeslání reklamace",                      "minuty": 60},
     {"nazev": "Správa ticketu",                          "minuty": 30},
     {"nazev": "Potvrzení o ukončení reklamace",          "minuty": 15},
+    {"nazev": "Komunikace s dodavatelem",                "minuty": 30},
+    {"nazev": "Příjem reklamace",                        "minuty": 30},
+    {"nazev": "Uzavření ticketu",                        "minuty": 25},
     {"nazev": OSTATNI_KATALOG_LABEL,                     "minuty": 15},
 ]
 KROK_KATALOG_BY_NAZEV = {k["nazev"]: k for k in KROK_KATALOG}
@@ -69,8 +72,8 @@ EXPORT_FAZE_SLOUPCE = [
 ]
 
 NASTAVENI_DEFAULTS = {
-    "skoda":   {"sazba": 1350, "prevod_hodin": 431},
-    "porsche": {"sazba": 1350, "prevod_hodin": 0},
+    "skoda":   {"prevod_hodin": 431},
+    "porsche": {"prevod_hodin": 0},
 }
 
 DOPRAVCI = ["Česká pošta", "DHL", "Geis", "PPL", "GLS", "Zásilkovna", "DPD", "Toptrans", "Jiný"]
@@ -79,19 +82,18 @@ DOPRAVCI = ["Česká pošta", "DHL", "Geis", "PPL", "GLS", "Zásilkovna", "DPD",
 def get_nastaveni(brand: str) -> dict:
     data = load_all()
     ulozene = data.get("nastaveni", {}).get(brand, {})
-    default = NASTAVENI_DEFAULTS.get(brand, {"sazba": 0, "prevod_hodin": 0})
+    default = NASTAVENI_DEFAULTS.get(brand, {"prevod_hodin": 0})
     return {**default, **ulozene}
 
 
 def update_nastaveni(brand: str, patch: dict) -> dict:
     data = load_all()
     nastaveni = data.setdefault("nastaveni", {}).setdefault(brand, dict(get_nastaveni(brand)))
-    for key in ("sazba", "prevod_hodin"):
-        if key in patch:
-            try:
-                nastaveni[key] = float(patch[key])
-            except (TypeError, ValueError):
-                pass
+    if "prevod_hodin" in patch:
+        try:
+            nastaveni["prevod_hodin"] = float(patch["prevod_hodin"])
+        except (TypeError, ValueError):
+            pass
     save_all(data)
     return nastaveni
 
@@ -601,7 +603,7 @@ def export_xlsx(brand: str, out_path: Path) -> Path:
     row += 1
     sazba_row = row
     ws.cell(row=row, column=1, value="SAZBA").font = NORMAL
-    sc = ws.cell(row=row, column=total_col_idx, value=nastaveni["sazba"])
+    sc = ws.cell(row=row, column=total_col_idx, value=None)
     sc.number_format = "#,##0"
     row += 1
     ws.cell(row=row, column=1, value="K FAKTURACI bez DPH").font = BOLD
