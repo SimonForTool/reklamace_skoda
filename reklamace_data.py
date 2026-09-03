@@ -98,13 +98,18 @@ def update_nastaveni(brand: str, patch: dict) -> dict:
     return nastaveni
 
 
-def potvrdit_fakturaci(brand: str) -> dict:
-    """Označí všechny aktuálně uzavřené (a dosud nefakturované) reklamace
-    dané značky jako Fakturováno a odečte jejich odpracované hodiny
-    z rozpočtu PŘEVOD hodin — zůstatek se stává počátkem pro příště."""
+def potvrdit_fakturaci(brand: str, cisla: list | None = None) -> dict:
+    """Označí uzavřené (a dosud nefakturované) reklamace dané značky jako
+    Fakturováno a odečte jejich odpracované hodiny z rozpočtu PŘEVOD hodin
+    — zůstatek se stává počátkem pro příště. Pokud je zadán výběr cisla,
+    zahrnou se jen ty (a stále jen pokud jsou skutečně uzavřené); jinak
+    všechny aktuálně uzavřené."""
     data = load_all()
     items = [i for i in data.get("items", {}).values()
              if i.get("znacka", DEFAULT_BRAND) == brand and overall_status(i) == "vyřízeno"]
+    if cisla is not None:
+        vybrana = set(cisla)
+        items = [i for i in items if i["cislo"] in vybrana]
     total_minutes = sum(reklamace_total_minutes(i) for i in items)
     total_hodin = round(total_minutes / 60, 2)
 
@@ -495,16 +500,20 @@ def history_all(brand: str | None = None) -> list:
     return [history_row(i) for i in list_all(brand)]
 
 
-def export_xlsx(brand: str, out_path: Path) -> Path:
+def export_xlsx(brand: str, out_path: Path, cisla: list | None = None) -> Path:
     """Export VAT do Excelu — podklad pro fakturaci. Jeden řádek na
     UZAVŘENOU reklamaci se souhrnnými hodinami za každého dodavatele
     (bez rozpisu jednotlivých kroků), a souhrnné řádky Průměr/TOTAL/
-    PŘEVOD hodin do dalšího měsíce/SAZBA/K FAKTURACI bez DPH."""
+    PŘEVOD hodin do dalšího měsíce/SAZBA/K FAKTURACI bez DPH. Pokud je
+    zadán výběr cisla, exportují se jen ty (a stále jen uzavřené)."""
     from openpyxl import Workbook
     from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
     from openpyxl.utils import get_column_letter
 
     items = [i for i in list_all(brand) if i["celkovy_stav"] == "vyřízeno"]
+    if cisla is not None:
+        vybrana = set(cisla)
+        items = [i for i in items if i["cislo"] in vybrana]
     items.sort(key=lambda i: i.get("datum_prijeti") or "")
     nastaveni = get_nastaveni(brand)
 

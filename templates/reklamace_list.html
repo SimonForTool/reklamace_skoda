@@ -128,7 +128,7 @@
           <input id="nastaveniPrevod" type="number" step="0.1" onchange="changeNastaveni('prevod_hodin', this.value)">
         </div>
         <div class="field">
-          <label>Nevyfakturováno (hodiny čekající na potvrzení)</label>
+          <label>Vybráno k fakturaci (<span id="vybranoCount">0</span> reklamací)</label>
           <div class="readonly-val" id="nevyfakturovanoHodin">0 h</div>
         </div>
         <div class="field">
@@ -181,6 +181,8 @@
 const BRAND = {{ brand | tojson }};
 const STAV_CLASS = { "nová": "nova", "probíhá": "probiha", "vyřízeno": "vyrizeno", "fakturováno": "fakturovano" };
 let NASTAVENI = { prevod_hodin: 0 };
+let LAST_ROWS = [];
+let SELECTED_CISLA = new Set();
 
 async function loadNastaveni() {
   const resp = await fetch(`/api/nastaveni?znacka=${BRAND}`);
@@ -195,21 +197,62 @@ async function changeNastaveni(field, value) {
     body: JSON.stringify({ znacka: BRAND, [field]: value }),
   });
   NASTAVENI = await resp.json();
-  const nevyfakturovanoHodin = parseFloat(document.getElementById("nevyfakturovanoHodin").textContent) || 0;
-  updateZustatekPreview(nevyfakturovanoHodin);
+  recomputeVyberPreview();
   showToast("Nastavení uloženo.");
 }
 
-function updateZustatekPreview(nevyfakturovanoHodin) {
-  const zustatek = (NASTAVENI.prevod_hodin || 0) - nevyfakturovanoHodin;
+function recomputeVyberPreview() {
+  const vybranoHodin = LAST_ROWS
+    .filter(r => r.stav === "vyřízeno" && SELECTED_CISLA.has(r.cislo))
+    .reduce((s, r) => s + (r.celkem_hodin || 0), 0);
+  document.getElementById("nevyfakturovanoHodin").textContent = `${vybranoHodin.toFixed(1)} h`;
+  const zustatek = (NASTAVENI.prevod_hodin || 0) - vybranoHodin;
   const el = document.getElementById("zustatekPreview");
   el.textContent = `${zustatek.toFixed(1)} h`;
   el.style.color = zustatek < 0 ? "#e74c3c" : "";
+  const countEl = document.getElementById("vybranoCount");
+  if (countEl) countEl.textContent = SELECTED_CISLA.size;
+}
+
+function toggleSelect(cislo, checked) {
+  if (checked) SELECTED_CISLA.add(cislo); else SELECTED_CISLA.delete(cislo);
+  recomputeVyberPreview();
+  const eligible = LAST_ROWS.filter(r => r.stav === "vyřízeno");
+  const allSelected = eligible.length > 0 && eligible.every(r => SELECTED_CISLA.has(r.cislo));
+  const someSelected = eligible.some(r => SELECTED_CISLA.has(r.cislo));
+  const selectAll = document.getElementById("selectAllCheckbox");
+  if (selectAll) {
+    selectAll.checked = allSelected;
+    selectAll.indeterminate = someSelected && !allSelected;
+  }
+}
+
+function toggleSelectAll(checked) {
+  for (const r of LAST_ROWS) {
+    if (r.stav === "vyřízeno") {
+      if (checked) SELECTED_CISLA.add(r.cislo); else SELECTED_CISLA.delete(r.cislo);
+    }
+  }
+  render(LAST_ROWS);
+  recomputeVyberPreview();
+}
+
+function exportXlsx() {
+  if (SELECTED_CISLA.size === 0) {
+    showToast("Zaškrtněte aspoň jednu uzavřenou reklamaci k exportu.", true);
+    return;
+  }
+  const cisla = Array.from(SELECTED_CISLA).join(",");
+  window.location.href = `/api/reklamace/export?znacka=${BRAND}&cisla=${encodeURIComponent(cisla)}`;
 }
 
 async function potvrditFakturaci() {
+  if (SELECTED_CISLA.size === 0) {
+    showToast("Zaškrtněte aspoň jednu uzavřenou reklamaci k fakturaci.", true);
+    return;
+  }
   if (!confirm(
-    "Potvrdit fakturaci označí VŠECHNY aktuálně uzavřené (nefakturované) reklamace jako Fakturováno " +
+    `Potvrdit fakturaci označí ${SELECTED_CISLA.size} vybraných uzavřených reklamací jako Fakturováno ` +
     "a odečte jejich odpracované hodiny z převodu hodin (rozpočtu) pro příští fakturaci.\n\n" +
     "Proveďte to až PO stažení a odeslání exportu VAT do Excelu. Pokračovat?"
   )) return;
@@ -217,7 +260,7 @@ async function potvrditFakturaci() {
     const resp = await fetch("/api/reklamace/potvrdit-fakturaci", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ znacka: BRAND }),
+      body: JSON.stringify({ znacka: BRAND, cisla: Array.from(SELECTED_CISLA) }),
     });
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.message || "Chyba při potvrzování fakturace.");
@@ -242,8 +285,11 @@ function escapeHtml(s) {
 async function loadList() {
   const resp = await fetch(`/api/reklamace/historie?znacka=${BRAND}`);
   const rows = await resp.json();
+  LAST_ROWS = rows;
+  SELECTED_CISLA = new Set(rows.filter(r => r.stav === "vyřízeno").map(r => r.cislo));
   renderStats(rows);
   render(rows);
+  recomputeVyberPreview();
 }
 
 function initials(name) {
@@ -278,9 +324,6 @@ function renderStats(rows) {
     <div class="stat-box"><div class="sv">${fmtKc(naklady)}</div><div class="sl">Náklady ForTool celkem</div></div>
     <div class="stat-box"><div class="sv">${fmtKc(faktura)}</div><div class="sl">Vydaná faktura celkem bez DPH</div></div>
     <div class="stat-box"><div class="sv" style="${neuhrazeno > 0 ? 'color:#e67e22' : ''}">${fmtKc(neuhrazeno)}</div><div class="sl">Čeká na úhradu</div></div>`;
-
-  document.getElementById("nevyfakturovanoHodin").textContent = `${cerpaniHodin.toFixed(1)} h`;
-  updateZustatekPreview(cerpaniHodin);
 }
 
 function render(rows) {
@@ -289,8 +332,14 @@ function render(rows) {
     body.innerHTML = `<div class="empty">Zatím žádné reklamace. Založte první tlačítkem "Nová reklamace".</div>`;
     return;
   }
+  const maVyber = rows.some(r => r.stav === "vyřízeno");
+  const vsechnyVybrane = maVyber && rows.filter(r => r.stav === "vyřízeno").every(r => SELECTED_CISLA.has(r.cislo));
+  const selectAllTh = maVyber
+    ? `<input type="checkbox" id="selectAllCheckbox" ${vsechnyVybrane ? "checked" : ""} title="Vybrat/zrušit vše k fakturaci"
+         onchange="toggleSelectAll(this.checked)">`
+    : "";
   let html = `<table class="grid"><thead><tr>
-    <th>Číslo</th><th>Servisní partner</th><th>Kontaktní osoba</th>
+    <th>${selectAllTh}</th><th>Číslo</th><th>Servisní partner</th><th>Kontaktní osoba</th>
     <th>Datum přijetí</th><th>Datum ukončení</th><th>Stav</th><th>Doba trvání (prac. dny)</th>
     <th>Aktuální fáze</th><th>Odpovědná osoba</th><th>Celkem hodin</th>
     <th>Náklady ForTool</th><th>Faktura bez DPH</th><th>Úhrada</th><th>Poznámky</th>
@@ -308,7 +357,12 @@ function render(rows) {
     const poznamky = r.poznamky
       ? `<span title="${escapeHtml(r.poznamky)}" style="cursor:help;border-bottom:1px dotted #999">${escapeHtml(r.poznamky.slice(0, 30))}${r.poznamky.length > 30 ? "…" : ""}</span>`
       : "—";
+    const checkboxTd = r.stav === "vyřízeno"
+      ? `<input type="checkbox" ${SELECTED_CISLA.has(r.cislo) ? "checked" : ""}
+           onclick="event.stopPropagation()" onchange="toggleSelect('${r.cislo}', this.checked)">`
+      : "";
     html += `<tr class="row" onclick="location.href='/${BRAND}/reklamace/${r.cislo}'">
+      <td onclick="event.stopPropagation()">${checkboxTd}</td>
       <td><strong>${r.cislo}</strong></td>
       <td>${escapeHtml(r.servisni_partner)}</td>
       <td>${escapeHtml(r.kontaktni_osoba || "—")}</td>
@@ -365,10 +419,6 @@ async function createReklamace() {
     err.textContent = e.message;
     err.style.display = "block";
   }
-}
-
-function exportXlsx() {
-  window.location.href = `/api/reklamace/export?znacka=${BRAND}`;
 }
 
 function showToast(msg, isError = false) {

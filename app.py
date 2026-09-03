@@ -154,10 +154,12 @@ def api_reklamace_export():
     brand = request.args.get("znacka")
     if brand not in reklamace_data.BRANDS:
         return jsonify({"status": "error", "message": "Neznámá značka."}), 400
+    cisla_param = request.args.get("cisla")
+    cisla = [c for c in cisla_param.split(",") if c] if cisla_param is not None else None
     from datetime import date
     filename = f"VAT_Vykaz_hodin_{brand}_{date.today().strftime('%m.%Y')}.xlsx"
     out_path = OUTPUT_DIR / filename
-    reklamace_data.export_xlsx(brand, out_path)
+    reklamace_data.export_xlsx(brand, out_path, cisla)
     return send_file(out_path, as_attachment=True, download_name=filename)
 
 @app.get("/api/nastaveni")
@@ -181,7 +183,8 @@ def api_potvrdit_fakturaci():
     brand = body.get("znacka")
     if brand not in reklamace_data.BRANDS:
         return jsonify({"status": "error", "message": "Neznámá značka."}), 400
-    return jsonify(reklamace_data.potvrdit_fakturaci(brand))
+    cisla = body.get("cisla")
+    return jsonify(reklamace_data.potvrdit_fakturaci(brand, cisla))
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
