@@ -77,6 +77,9 @@
     background: var(--blue); color: #fff; padding: 8px 10px; text-align: left;
     font-size: 11px; white-space: nowrap;
   }
+  table.grid th.sortable { cursor: pointer; user-select: none; }
+  table.grid th.sortable:hover { background: var(--blue2); }
+  table.grid th.sortable .arrow { display: inline-block; width: 10px; opacity: .6; }
   table.grid td { padding: 8px 10px; border-bottom: 1px solid #eee; white-space: nowrap; }
   table.grid tr.row:hover td { background: #f7fafc; cursor: pointer; }
   table.grid td.num { text-align: right; }
@@ -183,6 +186,38 @@ const STAV_CLASS = { "nová": "nova", "probíhá": "probiha", "vyřízeno": "vyr
 let NASTAVENI = { prevod_hodin: 0 };
 let LAST_ROWS = [];
 let SELECTED_CISLA = new Set();
+let SORT = { col: null, dir: 1 };
+const STAV_ORADI = { "nová": 0, "probíhá": 1, "vyřízeno": 2, "fakturováno": 3 };
+
+function sortBy(col) {
+  if (SORT.col === col) { SORT.dir *= -1; } else { SORT.col = col; SORT.dir = 1; }
+  render(LAST_ROWS);
+}
+
+function sortedRows(rows) {
+  if (!SORT.col) return rows;
+  const col = SORT.col;
+  const dir = SORT.dir;
+  const withVal = rows.map((r, idx) => ({ r, idx }));
+  withVal.sort((a, b) => {
+    const av = a.r[col], bv = b.r[col];
+    const aEmpty = av === null || av === undefined || av === "";
+    const bEmpty = bv === null || bv === undefined || bv === "";
+    if (aEmpty && bEmpty) return a.idx - b.idx;
+    if (aEmpty) return 1;
+    if (bEmpty) return -1;
+    let cmp;
+    if (col === "stav") {
+      cmp = (STAV_ORADI[av] ?? 0) - (STAV_ORADI[bv] ?? 0);
+    } else if (col === "servisni_partner") {
+      cmp = String(av).localeCompare(String(bv), "cs");
+    } else {
+      cmp = av < bv ? -1 : av > bv ? 1 : 0;
+    }
+    return cmp !== 0 ? cmp * dir : a.idx - b.idx;
+  });
+  return withVal.map(x => x.r);
+}
 
 async function loadNastaveni() {
   const resp = await fetch(`/api/nastaveni?znacka=${BRAND}`);
@@ -338,13 +373,24 @@ function render(rows) {
     ? `<input type="checkbox" id="selectAllCheckbox" ${vsechnyVybrane ? "checked" : ""} title="Vybrat/zrušit vše k fakturaci"
          onchange="toggleSelectAll(this.checked)">`
     : "";
+  const sortTh = (key, label) => {
+    const active = SORT.col === key;
+    const arrow = active ? (SORT.dir === 1 ? "▲" : "▼") : "";
+    return `<th class="sortable" onclick="sortBy('${key}')">${label} <span class="arrow">${arrow}</span></th>`;
+  };
   let html = `<table class="grid"><thead><tr>
-    <th>${selectAllTh}</th><th>Číslo</th><th>Servisní partner</th><th>Kontaktní osoba</th>
-    <th>Datum přijetí</th><th>Datum ukončení</th><th>Stav</th><th>Doba trvání (prac. dny)</th>
+    <th>${selectAllTh}</th>
+    ${sortTh("cislo", "Číslo")}
+    ${sortTh("servisni_partner", "Servisní partner")}
+    <th>Kontaktní osoba</th>
+    ${sortTh("datum_prijeti", "Datum přijetí")}
+    ${sortTh("uzavreno", "Datum ukončení")}
+    ${sortTh("stav", "Stav")}
+    <th>Doba trvání (prac. dny)</th>
     <th>Aktuální fáze</th><th>Odpovědná osoba</th><th>Celkem hodin</th>
     <th>Náklady ForTool</th><th>Faktura bez DPH</th><th>Úhrada</th><th>Poznámky</th>
   </tr></thead><tbody>`;
-  for (const r of rows) {
+  for (const r of sortedRows(rows)) {
     const inits = initials(r.odpovedna_osoba);
     const odpTd = inits
       ? `<span title="${escapeHtml(r.odpovedna_osoba)}" style="cursor:help;border-bottom:1px dotted #999">${inits}</span>`
