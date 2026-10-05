@@ -213,6 +213,11 @@
             <label>Odpovědná osoba</label>
             <input id="f-{{ f.key }}-odpovedna_osoba" type="text" onchange="changeFaze('{{ f.key }}', 'odpovedna_osoba', this.value)">
           </div>
+          <div class="field">
+            <label>Číslo ticketu ({{ f.label }})</label>
+            <input id="f-{{ f.key }}-cislo_ticketu" type="text" placeholder="Číslo ticketu v systému dodavatele"
+                   onchange="changeFaze('{{ f.key }}', 'cislo_ticketu', this.value)">
+          </div>
           <div class="field" style="grid-column: 1 / -1">
             <label>Poznámka</label>
             <textarea id="f-{{ f.key }}-poznamka" onchange="changeFaze('{{ f.key }}', 'poznamka', this.value)"></textarea>
@@ -332,6 +337,7 @@ function render() {
     document.getElementById(`f-${key}-stav`).className = "stav-select " + f.stav;
     document.getElementById(`f-${key}-datum`).value = f.datum || "";
     document.getElementById(`f-${key}-odpovedna_osoba`).value = f.odpovedna_osoba || "";
+    document.getElementById(`f-${key}-cislo_ticketu`).value = f.cislo_ticketu || "";
     document.getElementById(`f-${key}-poznamka`).value = f.poznamka || "";
     if (key === "ostatni") {
       document.getElementById(`f-${key}-dodavatel`).value = f.dodavatel || "";

@@ -388,6 +388,7 @@ function render(rows) {
     ${sortTh("stav", "Stav")}
     <th>Doba trvání (prac. dny)</th>
     <th>Aktuální fáze</th><th>Odpovědná osoba</th><th>Celkem hodin</th>
+    <th>WETSy – číslo ticketu</th>
     <th>Náklady ForTool</th><th>Faktura vydaná (bez DPH)</th><th>Úhrada</th><th>Poznámky</th>
   </tr></thead><tbody>`;
   for (const r of sortedRows(rows)) {
@@ -419,6 +420,7 @@ function render(rows) {
       <td>${escapeHtml(r.aktualni_faze)}</td>
       <td>${odpTd}</td>
       <td class="num">${r.celkem_hodin} h</td>
+      <td>${escapeHtml(r.wetsy_cislo_ticketu || "—")}</td>
       <td class="num">${naklady}</td>
       <td class="num">${r.faktura_celkem ? fmtKc(r.faktura_celkem) : "—"}</td>
       <td>${uhradaClass ? `<span class="badge ${uhradaClass}">${escapeHtml(r.uhrada_stav)}</span>` : "—"}</td>

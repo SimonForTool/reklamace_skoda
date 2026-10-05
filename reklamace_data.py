@@ -138,6 +138,7 @@ def _empty_faze(key: str) -> dict:
         "datum": None,
         "poznamka": "",
         "odpovedna_osoba": "",
+        "cislo_ticketu": "",
         "prilohy": [],
         "kroky": _empty_kroky(),
         # Náklady a fakturace
@@ -354,7 +355,7 @@ def update_faze(cislo: str, faze_key: str, patch: dict) -> dict | None:
         return None
     faze = item["faze"][faze_key]
     for key in ("stav", "datum", "poznamka", "odpovedna_osoba", "dodavatel",
-                "dopravce", "datum_uhrady", "poznamky_faktura"):
+                "cislo_ticketu", "dopravce", "datum_uhrady", "poznamky_faktura"):
         if key in patch:
             faze[key] = patch[key]
     for key in ("naklady_fortool", "vydana_faktura"):
@@ -504,6 +505,7 @@ def history_row(item: dict) -> dict:
         "faktura_neuhrazeno": round(reklamace_faktura_neuhrazeno(item), 2),
         "uhrada_stav": reklamace_uhrada_stav(item),
         "poznamky": reklamace_poznamky_souhrn(item),
+        "wetsy_cislo_ticketu": item["faze"]["wetsy"].get("cislo_ticketu", ""),
     }
 
 
